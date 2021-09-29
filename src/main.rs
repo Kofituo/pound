@@ -13,7 +13,6 @@ impl Drop for CleanUp {
 }
 
 fn editor_process_key(event: &KeyEvent) -> u8 {
-    let has_modifiers = !event.modifiers.is_empty();
     match event.code {
         KeyCode::Char(val) => {
             //configure 'q' to exit program
