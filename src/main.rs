@@ -17,7 +17,7 @@ fn editor_process_key(event: &KeyEvent) -> u8 {
     match event.code {
         KeyCode::Char(val) => {
             //configure 'q' to exit program
-            if !has_modifiers && val == 'q' {
+            if val == 'q' {
                 return QUIT;
             }
         }
