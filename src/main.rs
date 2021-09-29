@@ -33,7 +33,7 @@ fn main() {
     loop {
         let return_value = match event::read().expect("Failed to read line") {
             Event::Key(event) => {
-                println!("{:?}", event);
+                println!("{:?}\r", event);
                 editor_process_key(&event)
             }
             _ => 0,
