@@ -8,7 +8,7 @@ struct CleanUp;
 
 impl Drop for CleanUp {
     fn drop(&mut self) {
-        terminal::disable_raw_mode().expect("Could not disable raw mode")
+        terminal::disable_raw_mode()?
     }
 }
 
@@ -25,13 +25,14 @@ fn editor_process_key(event: &KeyEvent) -> u8 {
     0
 }
 
-fn main() {
+fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
-    terminal::enable_raw_mode().expect("Could not turn on Raw mode");
+    terminal::enable_raw_mode()?; /* modify */
     loop {
-        /* modify */
-        if event::poll(Duration::from_millis(500)).expect("Error occurred") {
-            let return_value = match event::read().expect("Failed to read line") {
+        if event::poll(Duration::from_millis(500))? {
+            /* modify */
+            let return_value = match event::read()? {
+                /* modify */
                 Event::Key(event) => {
                     println!("{:?}\r", event);
                     editor_process_key(&event)
@@ -44,6 +45,6 @@ fn main() {
         } else {
             println!("No input yet\r");
         }
-        /* end */
     }
+    Ok(()) /* add this line */
 }
