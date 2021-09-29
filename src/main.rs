@@ -6,10 +6,6 @@ use std::io::Read;
 fn main() {
     /* add the following */
     let mut buf = [0; 1];
-    loop {
-        io::stdin()
-            .read_exact(&mut buf)
-            .expect("Failed to read line");
-    }
+    while io::stdin().read(&mut buf).expect("Failed to read line") == 1 {}
     /* end */
 }
