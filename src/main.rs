@@ -1,6 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crossterm::{event, terminal};
-use std::time::Duration; /* add this line */
+use std::time::Duration;
 
 const QUIT: u8 = 1;
 
@@ -8,7 +8,7 @@ struct CleanUp;
 
 impl Drop for CleanUp {
     fn drop(&mut self) {
-        terminal::disable_raw_mode()?
+        terminal::disable_raw_mode().expect("Unable to disable raw mode")
     }
 }
 
@@ -27,12 +27,10 @@ fn editor_process_key(event: &KeyEvent) -> u8 {
 
 fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
-    terminal::enable_raw_mode()?; /* modify */
+    terminal::enable_raw_mode()?;
     loop {
         if event::poll(Duration::from_millis(500))? {
-            /* modify */
             let return_value = match event::read()? {
-                /* modify */
                 Event::Key(event) => {
                     println!("{:?}\r", event);
                     editor_process_key(&event)
@@ -46,5 +44,5 @@ fn main() -> crossterm::Result<()> {
             println!("No input yet\r");
         }
     }
-    Ok(()) /* add this line */
+    Ok(())
 }
