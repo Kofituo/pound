@@ -1,5 +1,7 @@
+/* add the following */
 use std::io;
 use std::io::Read;
+/* end */
 
 fn main() {
     /* add the following */
