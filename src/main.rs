@@ -1,8 +1,5 @@
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent}; /* modify */
 use crossterm::{event, terminal};
-use std::time::Duration;
-
-const QUIT: u8 = 1;
 
 struct CleanUp;
 
@@ -12,37 +9,33 @@ impl Drop for CleanUp {
     }
 }
 
-fn editor_process_key(event: &KeyEvent) -> u8 {
-    let has_modifiers = !event.modifiers.is_empty();
-    match event.code {
-        KeyCode::Char(val) => {
-            if !has_modifiers && val == 'q' {
-                return QUIT;
-            }
-        }
-        _ => {}
-    }
-    0
-}
-
-fn main() -> crossterm::Result<()> {
+fn main() {
     let _clean_up = CleanUp;
-    terminal::enable_raw_mode()?;
+    terminal::enable_raw_mode().expect("Could not turn on Raw mode");
+    /* add the following */
     loop {
-        if event::poll(Duration::from_millis(500))? {
-            let return_value = match event::read()? {
-                Event::Key(event) => {
-                    println!("{:?}\r", event);
-                    editor_process_key(&event)
+        if let Event::Key(event) = event::read().expect("Failed to read line") {
+            match event {
+                KeyEvent {
+                    code: KeyCode::Char('q'),
+                    modifiers: event::KeyModifiers::NONE,
+                } => break,
+                _ => {
+                    //todo
                 }
-                _ => 0,
-            };
-            if return_value == QUIT {
-                break;
             }
-        } else {
-            println!("No input yet\r");
-        }
+            println!("{:?}\r", event);
+        };
     }
-    Ok(())
+    /* end */
+    /* comment out the following
+    let mut buf = [0; 1];
+    while io::stdin().read(&mut buf).expect("Failed to read") == 1 && buf != [b'q'] {
+        let character = buf[0] as char;
+        if character.is_control() {
+            println!("{}\r", character as u8)
+        } else {
+            println!("{}\r", character)
+        }
+    }*/
 }
