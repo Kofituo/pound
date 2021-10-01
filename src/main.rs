@@ -15,8 +15,8 @@ fn main() {
     terminal::enable_raw_mode().expect("Could not turn on Raw mode");
     loop {
         if event::poll(Duration::from_millis(500)).expect("Error") {
+            /* add this line */
             if let Event::Key(event) = event::read().expect("Failed to read line") {
-                /* add this line */
                 match event {
                     KeyEvent {
                         code: KeyCode::Char('q'),
