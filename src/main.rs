@@ -1,6 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crossterm::{event, terminal};
-use std::time::Duration; /* add this line */
+use std::time::Duration;
 
 struct CleanUp;
 
@@ -14,12 +14,12 @@ fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
     terminal::enable_raw_mode()?;
     loop {
-        if event::poll(Duration::from_millis(500))? {
+        if event::poll(Duration::from_millis(1000))? {
             if let Event::Key(event) = event::read()? {
                 match event {
                     KeyEvent {
                         code: KeyCode::Char('q'),
-                        modifiers: event::KeyModifiers::NONE,
+                        modifiers: event::KeyModifiers::CONTROL, /* modify */
                     } => break,
                     _ => {
                         //todo
