@@ -13,12 +13,14 @@ impl Drop for CleanUp {
     }
 }
 
+/* modify */
 struct Output {
     win_size: (usize, usize),
 }
 
 impl Output {
     fn new() -> Self {
+        /* add this variable */
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize))
             .unwrap();
@@ -30,19 +32,18 @@ impl Output {
         execute!(stdout(), cursor::MoveTo(0, 0))
     }
 
-    /* add this function */
     fn draw_rows(&self) {
-        for _ in 0..24 {
+        let screen_rows = self.win_size.1; /* add this line */
+        for _ in 0..screen_rows {
+            /* modify */
             println!("~\r");
         }
     }
 
     fn refresh_screen(&self) -> crossterm::Result<()> {
         Self::clear_screen()?;
-        /* add the following lines*/
         self.draw_rows();
         execute!(stdout(), cursor::MoveTo(0, 0))
-        /* end */
     }
 }
 
