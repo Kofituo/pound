@@ -1,6 +1,6 @@
 use crossterm::event::*;
-use crossterm::terminal::ClearType; /* add import */
-use crossterm::{event, execute, terminal}; /* add import */
+use crossterm::terminal::ClearType;
+use crossterm::{cursor, event, execute, terminal};
 use std::io::stdout;
 use std::time::Duration;
 
@@ -8,23 +8,41 @@ struct CleanUp;
 
 impl Drop for CleanUp {
     fn drop(&mut self) {
-        terminal::disable_raw_mode().expect("Unable to disable raw mode")
+        terminal::disable_raw_mode().expect("Unable to disable raw mode");
+        Output::clear_screen().expect("error");
     }
 }
 
-struct Output;
+struct Output {
+    win_size:(usize,usize)
+};
 
 impl Output {
     fn new() -> Self {
-        Self
+        let win_size =terminal::size().and_then(|it|)
+        Self {
+            win_size:
+        }
     }
 
     fn clear_screen() -> crossterm::Result<()> {
-        execute!(stdout(), terminal::Clear(ClearType::All))
+        execute!(stdout(), terminal::Clear(ClearType::All))?;
+        execute!(stdout(), cursor::MoveTo(0, 0))
+    }
+
+    /* add this function */
+    fn draw_rows(&self) {
+        for _ in 0..24 {
+            println!("~\r");
+        }
     }
 
     fn refresh_screen(&self) -> crossterm::Result<()> {
-        Self::clear_screen()
+        Self::clear_screen()?;
+        /* add the following lines*/
+        self.draw_rows();
+        execute!(stdout(), cursor::MoveTo(0, 0))
+        /* end */
     }
 }
 
@@ -44,14 +62,14 @@ impl Reader {
 
 struct Editor {
     reader: Reader,
-    output: Output, /* add this line*/
+    output: Output,
 }
 
 impl Editor {
     fn new() -> Self {
         Self {
             reader: Reader,
-            output: Output::new(), /* add this line */
+            output: Output::new(),
         }
     }
 
@@ -67,7 +85,7 @@ impl Editor {
     }
 
     fn run(&self) -> crossterm::Result<bool> {
-        self.output.refresh_screen()?; /* add this line*/
+        self.output.refresh_screen()?;
         self.process_keypress()
     }
 }
