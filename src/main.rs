@@ -16,6 +16,22 @@ impl Drop for CleanUp {
     }
 }
 
+struct CursorController {
+    cursor_x: usize,
+    cursor_y: usize,
+}
+
+impl CursorController {
+    fn new() -> CursorController {
+        Self {
+            cursor_x: 0,
+            cursor_y: 0,
+        }
+    }
+
+    fn move_cursor(&mut self, direction: KeyCode) {}
+}
+
 struct EditorContents {
     content: String,
 }
@@ -58,6 +74,7 @@ impl io::Write for EditorContents {
 struct Output {
     win_size: (usize, usize),
     editor_contents: EditorContents,
+    cursor_controller: CursorController, // add this field
 }
 
 impl Output {
@@ -68,6 +85,7 @@ impl Output {
         Self {
             win_size,
             editor_contents: EditorContents::new(),
+            cursor_controller: CursorController::new(), /* add initializer*/
         }
     }
 
@@ -85,7 +103,6 @@ impl Output {
                 if welcome.len() > screen_columns {
                     welcome.truncate(screen_columns)
                 }
-                /* add the following*/
                 let mut padding = (screen_columns - welcome.len()) / 2;
                 if padding != 0 {
                     self.editor_contents.push('~');
@@ -93,7 +110,6 @@ impl Output {
                 }
                 (0..padding).for_each(|_| self.editor_contents.push(' '));
                 self.editor_contents.push_str(&welcome);
-                /* end */
             } else {
                 self.editor_contents.push('~');
             }
@@ -111,7 +127,15 @@ impl Output {
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        queue!(self.editor_contents, cursor::MoveTo(0, 0), cursor::Show)?;
+        /* modify */
+        let cursor_x = self.cursor_controller.cursor_x;
+        let cursor_y = self.cursor_controller.cursor_y;
+        queue!(
+            self.editor_contents,
+            cursor::MoveTo(cursor_x as u16, cursor_y as u16),
+            cursor::Show
+        )?;
+        /* end */
         self.editor_contents.flush()
     }
 }
