@@ -10,6 +10,21 @@ impl Drop for CleanUp {
     }
 }
 
+struct Reader;
+
+/* add the following*/
+impl Reader {
+    fn read_key(&self) -> crossterm::Result<KeyEvent> {
+        loop {
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(event) = event::read()? {
+                    return Ok(event);
+                }
+            }
+        }
+    }
+}
+
 fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
     terminal::enable_raw_mode()?;
