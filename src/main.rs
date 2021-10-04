@@ -1,6 +1,6 @@
 use crossterm::event::*;
 use crossterm::terminal::ClearType;
-use crossterm::{cursor, event, execute, queue, terminal}; /* modify */
+use crossterm::{cursor, event, execute, queue, terminal};
 use std::io;
 use std::io::{stdout, Write};
 use std::time::Duration;
@@ -55,7 +55,7 @@ impl io::Write for EditorContents {
 
 struct Output {
     win_size: (usize, usize),
-    editor_contents: EditorContents, /* add this line */
+    editor_contents: EditorContents,
 }
 
 impl Output {
@@ -74,24 +74,30 @@ impl Output {
         execute!(stdout(), cursor::MoveTo(0, 0))
     }
 
-    /* modify */
     fn draw_rows(&mut self) {
         let screen_rows = self.win_size.1;
         for i in 0..screen_rows {
-            self.editor_contents.push('~'); /* modify */
+            self.editor_contents.push('~');
             if i < screen_rows - 1 {
-                self.editor_contents.push_str("\r\n"); /* modify */
+                self.editor_contents.push_str("\r\n");
             }
         }
     }
 
-    /* modify */
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        queue!(self.editor_contents, terminal::Clear(ClearType::All))?; /* add this line*/
-        queue!(self.editor_contents, cursor::MoveTo(0, 0))?; /* add this line*/
+        queue!(
+            self.editor_contents,
+            cursor::Hide, //add this
+            terminal::Clear(ClearType::All),
+            cursor::MoveTo(0, 0)
+        )?;
         self.draw_rows();
-        queue!(self.editor_contents, cursor::MoveTo(0, 0))?; /* modify */
-        self.editor_contents.flush() /* add this line*/
+        queue!(
+            self.editor_contents,
+            cursor::MoveTo(0, 0),
+            /* add this */ cursor::Show
+        )?;
+        self.editor_contents.flush()
     }
 }
 
@@ -133,7 +139,6 @@ impl Editor {
         Ok(true)
     }
 
-    /* modify */
     fn run(&mut self) -> crossterm::Result<bool> {
         self.output.refresh_screen()?;
         self.process_keypress()
@@ -143,7 +148,7 @@ impl Editor {
 fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
     terminal::enable_raw_mode()?;
-    let mut editor = Editor::new(); /* modify */
+    let mut editor = Editor::new();
     while editor.run()? {}
     Ok(())
 }
