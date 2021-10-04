@@ -12,7 +12,6 @@ impl Drop for CleanUp {
 
 struct Reader;
 
-/* add the following*/
 impl Reader {
     fn read_key(&self) -> crossterm::Result<KeyEvent> {
         loop {
@@ -25,26 +24,37 @@ impl Reader {
     }
 }
 
+struct Editor {
+    reader: Reader,
+}
+
+impl Editor {
+    fn new() -> Self {
+        Self { reader: Reader }
+    }
+
+    fn process_keypress(&self) -> crossterm::Result<bool> {
+        match self.reader.read_key()? {
+            KeyEvent {
+                code: KeyCode::Char('q'),
+                modifiers: event::KeyModifiers::CONTROL,
+            } => return Ok(false),
+            _ => {}
+        }
+        Ok(true)
+    }
+
+    fn run(&self) -> crossterm::Result<bool> {
+        self.process_keypress()
+    }
+}
+
 fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
     terminal::enable_raw_mode()?;
-    loop {
-        if event::poll(Duration::from_millis(1000))? {
-            if let Event::Key(event) = event::read()? {
-                match event {
-                    KeyEvent {
-                        code: KeyCode::Char('q'),
-                        modifiers: event::KeyModifiers::CONTROL, /* modify */
-                    } => break,
-                    _ => {
-                        //todo
-                    }
-                }
-                println!("{:?}\r", event);
-            };
-        } else {
-            println!("No input yet\r");
-        }
-    }
+    /* modify */
+    let editor = Editor::new();
+    while editor.run()? {}
+    /* end */
     Ok(())
 }
