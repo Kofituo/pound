@@ -5,6 +5,8 @@ use std::io;
 use std::io::{stdout, Write};
 use std::time::Duration;
 
+const VERSION: &str = "0.0.1";
+
 struct CleanUp;
 
 impl Drop for CleanUp {
@@ -76,15 +78,30 @@ impl Output {
 
     fn draw_rows(&mut self) {
         let screen_rows = self.win_size.1;
+        let screen_columns = self.win_size.0;
         for i in 0..screen_rows {
-            self.editor_contents.push('~');
-            //add the following
+            if i == screen_rows / 3 {
+                let mut welcome = format!("Pound Editor --- Version {}", VERSION);
+                if welcome.len() > screen_columns {
+                    welcome.truncate(screen_columns)
+                }
+                /* add the following*/
+                let mut padding = (screen_columns - welcome.len()) / 2;
+                if padding != 0 {
+                    self.editor_contents.push('~');
+                    padding -= 1
+                }
+                (0..padding).for_each(|_| self.editor_contents.push(' '));
+                self.editor_contents.push_str(&welcome);
+                /* end */
+            } else {
+                self.editor_contents.push('~');
+            }
             queue!(
                 self.editor_contents,
                 terminal::Clear(ClearType::UntilNewLine)
             )
             .unwrap();
-            //end
             if i < screen_rows - 1 {
                 self.editor_contents.push_str("\r\n");
             }
@@ -92,7 +109,6 @@ impl Output {
     }
 
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        //modify
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         queue!(self.editor_contents, cursor::MoveTo(0, 0), cursor::Show)?;
