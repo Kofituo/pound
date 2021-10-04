@@ -1,5 +1,7 @@
-use crossterm::event::{Event, KeyCode, KeyEvent};
-use crossterm::{event, terminal};
+use crossterm::event::*;
+use crossterm::terminal::ClearType; /* add import */
+use crossterm::{event, execute, terminal}; /* add import */
+use std::io::stdout;
 use std::time::Duration;
 
 struct CleanUp;
@@ -7,6 +9,22 @@ struct CleanUp;
 impl Drop for CleanUp {
     fn drop(&mut self) {
         terminal::disable_raw_mode().expect("Unable to disable raw mode")
+    }
+}
+
+struct Output;
+
+impl Output {
+    fn new() -> Self {
+        Self
+    }
+
+    fn clear_screen() -> crossterm::Result<()> {
+        execute!(stdout(), terminal::Clear(ClearType::All))
+    }
+
+    fn refresh_screen(&self) -> crossterm::Result<()> {
+        Self::clear_screen()
     }
 }
 
@@ -26,11 +44,15 @@ impl Reader {
 
 struct Editor {
     reader: Reader,
+    output: Output, /* add this line*/
 }
 
 impl Editor {
     fn new() -> Self {
-        Self { reader: Reader }
+        Self {
+            reader: Reader,
+            output: Output::new(), /* add this line */
+        }
     }
 
     fn process_keypress(&self) -> crossterm::Result<bool> {
@@ -45,6 +67,7 @@ impl Editor {
     }
 
     fn run(&self) -> crossterm::Result<bool> {
+        self.output.refresh_screen()?; /* add this line*/
         self.process_keypress()
     }
 }
@@ -52,9 +75,7 @@ impl Editor {
 fn main() -> crossterm::Result<()> {
     let _clean_up = CleanUp;
     terminal::enable_raw_mode()?;
-    /* modify */
     let editor = Editor::new();
     while editor.run()? {}
-    /* end */
     Ok(())
 }
