@@ -1,7 +1,7 @@
 use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, terminal};
-use std::io::stdout;
+use std::io::{stdout, Write};
 use std::time::Duration;
 
 struct CleanUp;
@@ -13,14 +13,12 @@ impl Drop for CleanUp {
     }
 }
 
-/* modify */
 struct Output {
     win_size: (usize, usize),
 }
 
 impl Output {
     fn new() -> Self {
-        /* add this variable */
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize))
             .unwrap();
@@ -33,11 +31,16 @@ impl Output {
     }
 
     fn draw_rows(&self) {
-        let screen_rows = self.win_size.1; /* add this line */
-        for _ in 0..screen_rows {
-            /* modify */
-            println!("~\r");
+        let screen_rows = self.win_size.1;
+        /* modify */
+        for i in 0..screen_rows {
+            print!("~");
+            if i < screen_rows - 1 {
+                println!("\r")
+            }
+            stdout().flush();
         }
+        /* end */
     }
 
     fn refresh_screen(&self) -> crossterm::Result<()> {
