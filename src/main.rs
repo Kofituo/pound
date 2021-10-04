@@ -14,15 +14,15 @@ impl Drop for CleanUp {
 }
 
 struct Output {
-    win_size:(usize,usize)
-};
+    win_size: (usize, usize),
+}
 
 impl Output {
     fn new() -> Self {
-        let win_size =terminal::size().and_then(|it|)
-        Self {
-            win_size:
-        }
+        let win_size = terminal::size()
+            .map(|(x, y)| (x as usize, y as usize))
+            .unwrap();
+        Self { win_size }
     }
 
     fn clear_screen() -> crossterm::Result<()> {
