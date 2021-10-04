@@ -29,7 +29,24 @@ impl CursorController {
         }
     }
 
-    fn move_cursor(&mut self, direction: KeyCode) {}
+    /* add this function */
+    fn move_cursor(&mut self, direction: char) {
+        match direction {
+            'w' => {
+                self.cursor_y -= 1;
+            }
+            'a' => {
+                self.cursor_x -= 1;
+            }
+            's' => {
+                self.cursor_y += 1;
+            }
+            'd' => {
+                self.cursor_x += 1;
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 struct EditorContents {
@@ -124,6 +141,10 @@ impl Output {
         }
     }
 
+    fn move_cursor(&mut self, direction: char) {
+        self.cursor_controller.move_cursor(direction);
+    }
+
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
@@ -167,12 +188,19 @@ impl Editor {
         }
     }
 
-    fn process_keypress(&self) -> crossterm::Result<bool> {
+    fn process_keypress(&mut self) -> crossterm::Result<bool> {
+        /* modify*/
         match self.reader.read_key()? {
             KeyEvent {
                 code: KeyCode::Char('q'),
-                modifiers: event::KeyModifiers::CONTROL,
+                modifiers: KeyModifiers::CONTROL,
             } => return Ok(false),
+            /* add the following*/
+            KeyEvent {
+                code: KeyCode::Char(val @ ('w' | 'a' | 's' | 'd')),
+                modifiers: KeyModifiers::NONE,
+            } => self.output.move_cursor(val),
+            // end
             _ => {}
         }
         Ok(true)
