@@ -278,12 +278,13 @@ impl CursorController {
 }
 
 struct EditorRows {
-    row_content: Vec<String>,
+    row_content: Vec<Box<str>>,
     render: Vec<String>,
 }
 
 impl EditorRows {
     fn new() -> Self {
+        std::fs::write("oth", format!("{:?}", '农'.to_string().as_bytes())).unwrap();
         let arg = std::env::args().collect::<Vec<String>>();
         match arg.get(1) {
             None => Self {
@@ -298,7 +299,7 @@ impl EditorRows {
         let file_contents = std::fs::read_to_string(file).expect("Unable to read file");
         //let render = Vec::new();
 
-        let (render, row_content): (Vec<String>, Vec<String>) = file_contents
+        let (render, row_content): (Vec<String>, Vec<Box<str>>) = file_contents
             .lines()
             .map(|it| {
                 let capacity = it
