@@ -19,6 +19,7 @@ impl Drop for CleanUp {
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
+    number
 }
 
 impl CursorController {
@@ -29,19 +30,22 @@ impl CursorController {
         }
     }
 
-    /* add this function */
-    fn move_cursor(&mut self, direction: char) {
+    /* modify the function*/
+    fn move_cursor(&mut self, direction: KeyCode) {
         match direction {
-            'w' => {
-                self.cursor_y -= 1;
+            KeyCode::Up => {
+                self.cursor_y = self.cursor_y.saturating_sub(1);
             }
-            'a' => {
-                self.cursor_x -= 1;
+            KeyCode::Left => {
+                if self.cursor_x != 0 {
+                    self.cursor_x -= 1;
+                }
             }
-            's' => {
+            KeyCode::Down => {
+                //if self.cursor_y != self.{ }
                 self.cursor_y += 1;
             }
-            'd' => {
+            KeyCode::Right => {
                 self.cursor_x += 1;
             }
             _ => unimplemented!(),
@@ -141,7 +145,7 @@ impl Output {
         }
     }
 
-    fn move_cursor(&mut self, direction: char) {
+    fn move_cursor(&mut self, direction: KeyCode) {
         self.cursor_controller.move_cursor(direction);
     }
 
@@ -195,11 +199,11 @@ impl Editor {
                 code: KeyCode::Char('q'),
                 modifiers: KeyModifiers::CONTROL,
             } => return Ok(false),
-            /* add the following*/
+            /* modify the following*/
             KeyEvent {
-                code: KeyCode::Char(val @ ('w' | 'a' | 's' | 'd')),
+                code: direction @ (KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right),
                 modifiers: KeyModifiers::NONE,
-            } => self.output.move_cursor(val),
+            } => self.output.move_cursor(direction),
             // end
             _ => {}
         }
