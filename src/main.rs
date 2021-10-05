@@ -19,14 +19,19 @@ impl Drop for CleanUp {
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
-    number
+    /* add the following fields*/
+    screen_rows: usize,
+    screen_columns: usize,
 }
 
 impl CursorController {
-    fn new() -> CursorController {
+    /* modify */
+    fn new(win_size: (usize, usize)) -> CursorController {
         Self {
             cursor_x: 0,
             cursor_y: 0,
+            screen_columns: win_size.0,
+            screen_rows: win_size.1,
         }
     }
 
@@ -42,11 +47,14 @@ impl CursorController {
                 }
             }
             KeyCode::Down => {
-                //if self.cursor_y != self.{ }
-                self.cursor_y += 1;
+                if self.cursor_y != self.screen_rows - 1 {
+                    self.cursor_y += 1;
+                }
             }
             KeyCode::Right => {
-                self.cursor_x += 1;
+                if self.cursor_x != self.screen_columns - 1 {
+                    self.cursor_x += 1;
+                }
             }
             _ => unimplemented!(),
         }
@@ -95,7 +103,7 @@ impl io::Write for EditorContents {
 struct Output {
     win_size: (usize, usize),
     editor_contents: EditorContents,
-    cursor_controller: CursorController, // add this field
+    cursor_controller: CursorController,
 }
 
 impl Output {
@@ -106,7 +114,7 @@ impl Output {
         Self {
             win_size,
             editor_contents: EditorContents::new(),
-            cursor_controller: CursorController::new(), /* add initializer*/
+            cursor_controller: CursorController::new(win_size), /* modify initializer*/
         }
     }
 
