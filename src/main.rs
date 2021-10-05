@@ -19,7 +19,6 @@ impl Drop for CleanUp {
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
-    /* add the following fields*/
     screen_rows: usize,
     screen_columns: usize,
 }
@@ -201,18 +200,37 @@ impl Editor {
     }
 
     fn process_keypress(&mut self) -> crossterm::Result<bool> {
-        /* modify*/
         match self.reader.read_key()? {
             KeyEvent {
                 code: KeyCode::Char('q'),
                 modifiers: KeyModifiers::CONTROL,
             } => return Ok(false),
-            /* modify the following*/
             KeyEvent {
-                code: direction @ (KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right),
+                code:
+                    direction
+                    @
+                    (KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::Home
+                    | KeyCode::End),
                 modifiers: KeyModifiers::NONE,
             } => self.output.move_cursor(direction),
-            // end
+            KeyEvent {
+                code: val @ (KeyCode::PageUp | KeyCode::PageDown),
+                modifiers: KeyModifiers::NONE,
+            } =>
+            /*add this */
+            {
+                (0..self.output.win_size.1).for_each(|_| {
+                    self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
+                        KeyCode::Up
+                    } else {
+                        KeyCode::Down
+                    });
+                })
+            }
             _ => {}
         }
         Ok(true)
