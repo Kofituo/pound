@@ -24,7 +24,6 @@ struct CursorController {
 }
 
 impl CursorController {
-    /* modify */
     fn new(win_size: (usize, usize)) -> CursorController {
         Self {
             cursor_x: 0,
@@ -34,7 +33,6 @@ impl CursorController {
         }
     }
 
-    /* modify the function*/
     fn move_cursor(&mut self, direction: KeyCode) {
         match direction {
             KeyCode::Up => {
@@ -55,6 +53,9 @@ impl CursorController {
                     self.cursor_x += 1;
                 }
             }
+            /* add the following*/
+            KeyCode::End => self.cursor_x = self.screen_columns - 1,
+            KeyCode::Home => self.cursor_x = 0,
             _ => unimplemented!(),
         }
     }
@@ -159,7 +160,6 @@ impl Output {
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        /* modify */
         let cursor_x = self.cursor_controller.cursor_x;
         let cursor_y = self.cursor_controller.cursor_y;
         queue!(
@@ -167,7 +167,6 @@ impl Output {
             cursor::MoveTo(cursor_x as u16, cursor_y as u16),
             cursor::Show
         )?;
-        /* end */
         self.editor_contents.flush()
     }
 }
@@ -220,17 +219,13 @@ impl Editor {
             KeyEvent {
                 code: val @ (KeyCode::PageUp | KeyCode::PageDown),
                 modifiers: KeyModifiers::NONE,
-            } =>
-            /*add this */
-            {
-                (0..self.output.win_size.1).for_each(|_| {
-                    self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
-                        KeyCode::Up
-                    } else {
-                        KeyCode::Down
-                    });
-                })
-            }
+            } => (0..self.output.win_size.1).for_each(|_| {
+                self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
+                    KeyCode::Up
+                } else {
+                    KeyCode::Down
+                });
+            }),
             _ => {}
         }
         Ok(true)
