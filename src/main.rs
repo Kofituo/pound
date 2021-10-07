@@ -1,10 +1,9 @@
 use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, terminal};
-use std::fs::OpenOptions;
 use std::io::{stdout, Write};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
