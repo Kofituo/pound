@@ -21,7 +21,13 @@ struct EditorRows {
 }
 
 impl EditorRows {
-    fn new() {}
+    fn new() -> Self {
+        Self {
+            row_contents: vec!["Hello World".into()],
+        }
+    }
+
+    fn number_of_rows() {}
 }
 
 struct CursorController {
@@ -112,6 +118,7 @@ struct Output {
     win_size: (usize, usize),
     editor_contents: EditorContents,
     cursor_controller: CursorController,
+    editor_rows: EditorRows,
 }
 
 impl Output {
@@ -122,7 +129,8 @@ impl Output {
         Self {
             win_size,
             editor_contents: EditorContents::new(),
-            cursor_controller: CursorController::new(win_size), /* modify initializer*/
+            cursor_controller: CursorController::new(win_size),
+            editor_rows: EditorRows::new(),
         }
     }
 
