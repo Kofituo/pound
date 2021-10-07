@@ -8,6 +8,7 @@ use std::time::Duration;
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
+const TAB_STOP: usize = 8;
 
 struct CleanUp;
 
@@ -47,17 +48,19 @@ impl EditorRows {
 
     fn from_file(file: &Path) -> Self {
         let file_contents = fs::read_to_string(file).expect("Unable to read file");
+        let s = std::time::Instant::now();
+        let row_contents = file_contents
+            .lines()
+            .map(|it| {
+                let mut row = Row::new(it.into(), String::new());
+                Self::render_row(&mut row);
+                row
+            })
+            .collect();
+        let s = s.elapsed();
+        std::fs::write("render.txt", format!("{:?}", s)).unwrap();
         /* modify */
-        Self {
-            row_contents: file_contents
-                .lines()
-                .map(|it| {
-                    let mut row = Row::new(it.into(), String::new());
-                    Self::render_row(&mut row);
-                    row
-                })
-                .collect(),
-        }
+        Self { row_contents }
         /* end */
     }
 
@@ -79,13 +82,15 @@ impl EditorRows {
         let capacity = row
             .row_content
             .chars()
-            .fold(0, |acc, next| acc + if next == '\t' { 8 } else { 1 });
+            //modify
+            .fold(0, |acc, next| acc + if next == '\t' { TAB_STOP } else { 1 });
         row.render = String::with_capacity(capacity);
         row.row_content.chars().for_each(|c| {
             index += 1;
             if c == '\t' {
                 row.render.push(' ');
-                while index % 8 != 0 {
+                // modify
+                while index % TAB_STOP != 0 {
                     row.render.push(' ');
                     index += 1
                 }
