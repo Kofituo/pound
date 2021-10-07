@@ -27,7 +27,9 @@ impl EditorRows {
         }
     }
 
-    fn number_of_rows() {}
+    fn number_of_rows(&self) -> usize {
+        self.row_contents.len()
+    }
 }
 
 struct CursorController {
