@@ -18,8 +18,21 @@ impl Drop for CleanUp {
     }
 }
 
+struct Row {
+    row_content: Box<str>,
+    render: String,
+}
+
+impl Row {
+    fn new(row_content: Box<str>, render: String) -> Self {
+        Self {
+            row_content,
+            render,
+        }
+    }
+}
 struct EditorRows {
-    row_contents: Vec<Box<str>>,
+    row_contents: Vec<Row>, // modify
 }
 
 impl EditorRows {
@@ -34,9 +47,18 @@ impl EditorRows {
 
     fn from_file(file: &Path) -> Self {
         let file_contents = fs::read_to_string(file).expect("Unable to read file");
+        /* modify */
         Self {
-            row_contents: file_contents.lines().map(|it| it.into()).collect(),
+            row_contents: file_contents
+                .lines()
+                .map(|it| {
+                    let mut row = Row::new(it.into(), String::new());
+                    Self::render_row(&mut row);
+                    row
+                })
+                .collect(),
         }
+        /* end */
     }
 
     fn number_of_rows(&self) -> usize {
@@ -44,7 +66,33 @@ impl EditorRows {
     }
 
     fn get_row(&self, at: usize) -> &str {
-        &self.row_contents[at]
+        &self.row_contents[at].row_content // modify
+    }
+
+    /* add function*/
+    fn get_render(&self, at: usize) -> &String {
+        &self.row_contents[at].render
+    }
+
+    fn render_row(row: &mut Row) {
+        let mut index = 0;
+        let capacity = row
+            .row_content
+            .chars()
+            .fold(0, |acc, next| acc + if next == '\t' { 8 } else { 1 });
+        row.render = String::with_capacity(capacity);
+        row.row_content.chars().for_each(|c| {
+            index += 1;
+            if c == '\t' {
+                row.render.push(' ');
+                while index % 8 != 0 {
+                    row.render.push(' ');
+                    index += 1
+                }
+            } else {
+                row.render.push(c);
+            }
+        });
     }
 }
 
@@ -213,7 +261,7 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                let row = self.editor_rows.get_row(file_row);
+                let row = self.editor_rows.get_render(file_row); // modify
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
