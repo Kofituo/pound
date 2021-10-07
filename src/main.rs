@@ -68,9 +68,13 @@ impl EditorRows {
         &self.row_contents[at].row_content // modify
     }
 
-    /* add function*/
+    /* add functions */
     fn get_render(&self, at: usize) -> &String {
         &self.row_contents[at].render
+    }
+
+    fn get_editor_row(&self, at: usize) -> &Row {
+        &self.row_contents[at]
     }
 
     fn render_row(row: &mut Row) {
@@ -125,21 +129,26 @@ impl CursorController {
             .chars()
             .fold(0, |render_x, c| {
                 if c == '\t' {
-                    (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
+                    render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
                 } else {
-                    1
+                    render_x + 1
                 }
             })
     }
 
-    fn scroll(&mut self) {
+    fn scroll(&mut self, editor_rows: &EditorRows) {
+        self.render_x = 0;
+        if self.cursor_y < editor_rows.number_of_rows() {
+            self.render_x = self.get_render_x(editor_rows.get_editor_row(self.cursor_y));
+        }
         self.row_offset = cmp::min(self.row_offset, self.cursor_y);
         if self.cursor_y >= self.row_offset + self.screen_rows {
             self.row_offset = self.cursor_y - self.screen_rows + 1;
         }
-        self.column_offset = cmp::min(self.column_offset, self.cursor_x);
-        if self.cursor_x >= self.column_offset + self.screen_columns {
-            self.column_offset = self.cursor_x - self.screen_columns + 1;
+        self.column_offset = cmp::min(self.column_offset, self.render_x); //modify
+        if self.render_x >= self.column_offset + self.screen_columns {
+            //modify
+            self.column_offset = self.render_x - self.screen_columns + 1; //modify
         }
     }
 
@@ -164,7 +173,6 @@ impl CursorController {
                 }
             }
             KeyCode::Right => {
-                /* modify */
                 if self.cursor_y < number_of_rows {
                     match self.cursor_x.cmp(&editor_rows.get_row(self.cursor_y).len()) {
                         Ordering::Less => self.cursor_x += 1,
@@ -175,7 +183,6 @@ impl CursorController {
                         _ => {}
                     }
                 }
-                /* end */
             }
             KeyCode::End => self.cursor_x = self.screen_columns - 1,
             KeyCode::Home => self.cursor_x = 0,
@@ -276,7 +283,7 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                let row = self.editor_rows.get_render(file_row); // modify
+                let row = self.editor_rows.get_render(file_row);
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
@@ -299,10 +306,10 @@ impl Output {
     }
 
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        self.cursor_controller.scroll();
+        self.cursor_controller.scroll(&self.editor_rows); //modify
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        let cursor_x = self.cursor_controller.cursor_x - self.cursor_controller.column_offset;
+        let cursor_x = self.cursor_controller.render_x - self.cursor_controller.column_offset; // modify
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
             self.editor_contents,
