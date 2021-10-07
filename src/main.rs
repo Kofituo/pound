@@ -24,9 +24,7 @@ struct EditorRows {
 impl EditorRows {
     /* modify function*/
     fn new() -> Self {
-        let mut arg = env::args();
-
-        match arg.nth(1) {
+        match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
             },
@@ -165,7 +163,8 @@ impl Output {
         let screen_columns = self.win_size.0;
         for i in 0..screen_rows {
             if i >= self.editor_rows.number_of_rows() {
-                if i == screen_rows / 3 {
+                //modify
+                if self.editor_rows.number_of_rows() == 0 && i == screen_rows / 3 {
                     let mut welcome = format!("Pound Editor --- Version {}", VERSION);
                     if welcome.len() > screen_columns {
                         welcome.truncate(screen_columns)
