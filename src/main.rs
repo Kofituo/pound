@@ -16,6 +16,14 @@ impl Drop for CleanUp {
     }
 }
 
+struct EditorRows {
+    row_contents: Vec<Box<str>>,
+}
+
+impl EditorRows {
+    fn new() {}
+}
+
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
