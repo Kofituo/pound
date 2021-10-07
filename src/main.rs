@@ -1,9 +1,10 @@
 use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, terminal};
+use std::fs::OpenOptions;
 use std::io::{stdout, Write};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
@@ -22,7 +23,6 @@ struct EditorRows {
 }
 
 impl EditorRows {
-    /* modify function*/
     fn new() -> Self {
         match env::args().nth(1) {
             None => Self {
@@ -32,7 +32,6 @@ impl EditorRows {
         }
     }
 
-    /* add function */
     fn from_file(file: &Path) -> Self {
         let file_contents = fs::read_to_string(file).expect("Unable to read file");
         Self {
@@ -81,7 +80,9 @@ impl CursorController {
         }
     }
 
-    fn move_cursor(&mut self, direction: KeyCode, number_of_rows: usize) {
+    fn move_cursor(&mut self, direction: KeyCode, editor_rows: &EditorRows) {
+        let number_of_rows = editor_rows.number_of_rows();
+
         match direction {
             KeyCode::Up => {
                 self.cursor_y = self.cursor_y.saturating_sub(1);
@@ -97,9 +98,11 @@ impl CursorController {
                 }
             }
             KeyCode::Right => {
-                //if self.cursor_x != self.screen_columns - 1 { comment out this line
-                self.cursor_x += 1;
-                //} comment out this line
+                if self.cursor_y < number_of_rows
+                    && self.cursor_x < editor_rows.get_row(self.cursor_y).len()
+                {
+                    self.cursor_x += 1;
+                }
             }
             KeyCode::End => self.cursor_x = self.screen_columns - 1,
             KeyCode::Home => self.cursor_x = 0,
@@ -198,8 +201,7 @@ impl Output {
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
-                self.editor_contents
-                    .push_str(&self.editor_rows.get_row(file_row)[start..start + len])
+                self.editor_contents.push_str(&row[start..start + len])
             }
             queue!(
                 self.editor_contents,
@@ -213,17 +215,16 @@ impl Output {
     }
 
     fn move_cursor(&mut self, direction: KeyCode) {
-        //modify
         self.cursor_controller
-            .move_cursor(direction, self.editor_rows.number_of_rows());
+            .move_cursor(direction, &self.editor_rows);
     }
 
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        self.cursor_controller.scroll(); // this line
+        self.cursor_controller.scroll();
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        let cursor_x = self.cursor_controller.cursor_x;
-        let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset; //modify
+        let cursor_x = self.cursor_controller.cursor_x - self.cursor_controller.column_offset; //modify
+        let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
             self.editor_contents,
             cursor::MoveTo(cursor_x as u16, cursor_y as u16),
