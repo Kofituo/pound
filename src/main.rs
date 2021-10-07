@@ -41,11 +41,11 @@ impl EditorRows {
     }
 
     fn number_of_rows(&self) -> usize {
-        self.row_contents.len() /* modify */
+        self.row_contents.len()
     }
 
     fn get_row(&self, at: usize) -> &str {
-        &self.row_contents[at] /* modify */
+        &self.row_contents[at]
     }
 }
 
@@ -55,6 +55,7 @@ struct CursorController {
     screen_rows: usize,
     screen_columns: usize,
     row_offset: usize,
+    column_offset: usize,
 }
 
 impl CursorController {
@@ -65,6 +66,7 @@ impl CursorController {
             screen_columns: win_size.0,
             screen_rows: win_size.1,
             row_offset: 0,
+            column_offset: 0,
         }
     }
 
@@ -171,9 +173,8 @@ impl Output {
         let screen_rows = self.win_size.1;
         let screen_columns = self.win_size.0;
         for i in 0..screen_rows {
-            let file_row = i + self.cursor_controller.row_offset; // add line
+            let file_row = i + self.cursor_controller.row_offset;
             if file_row >= self.editor_rows.number_of_rows() {
-                //modify
                 if self.editor_rows.number_of_rows() == 0 && i == screen_rows / 3 {
                     let mut welcome = format!("Pound Editor --- Version {}", VERSION);
                     if welcome.len() > screen_columns {
@@ -190,9 +191,14 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                let len = cmp::min(self.editor_rows.get_row(file_row).len(), screen_columns); //modify
+                /* modify */
+                let row = self.editor_rows.get_row(file_row);
+                let column_offset = self.cursor_controller.column_offset;
+                let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
+                let start = if len == 0 { 0 } else { column_offset };
                 self.editor_contents
-                    .push_str(&self.editor_rows.get_row(file_row)[..len]) //modify
+                    .push_str(&self.editor_rows.get_row(file_row)[start..start + len])
+                /* end */
             }
             queue!(
                 self.editor_contents,
@@ -216,7 +222,7 @@ impl Output {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         let cursor_x = self.cursor_controller.cursor_x;
-        let cursor_y = self.cursor_controller.cursor_y;
+        let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset; //modify
         queue!(
             self.editor_contents,
             cursor::MoveTo(cursor_x as u16, cursor_y as u16),
