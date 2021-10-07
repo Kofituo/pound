@@ -284,7 +284,6 @@ struct EditorRows {
 
 impl EditorRows {
     fn new() -> Self {
-        std::fs::write("oth", format!("{:?}", '农'.to_string().as_bytes())).unwrap();
         let arg = std::env::args().collect::<Vec<String>>();
         match arg.get(1) {
             None => Self {
