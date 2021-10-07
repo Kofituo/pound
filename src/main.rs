@@ -104,6 +104,7 @@ struct CursorController {
     screen_columns: usize,
     row_offset: usize,
     column_offset: usize,
+    render_x: usize, // add field
 }
 
 impl CursorController {
@@ -115,7 +116,20 @@ impl CursorController {
             screen_rows: win_size.1,
             row_offset: 0,
             column_offset: 0,
+            render_x: 0, // initialize to 0
         }
+    }
+
+    fn get_render_x(&self, row: &Row) -> usize {
+        row.row_content[..self.cursor_x]
+            .chars()
+            .fold(0, |render_x, c| {
+                if c == '\t' {
+                    (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
+                } else {
+                    1
+                }
+            })
     }
 
     fn scroll(&mut self) {
