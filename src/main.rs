@@ -1,6 +1,7 @@
 use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, terminal};
+use std::cmp::Ordering;
 use std::io::{stdout, Write};
 use std::path::Path;
 use std::time::Duration;
@@ -89,6 +90,9 @@ impl CursorController {
             KeyCode::Left => {
                 if self.cursor_x != 0 {
                     self.cursor_x -= 1;
+                } else if self.cursor_y > 0 {
+                    self.cursor_y -= 1;
+                    self.cursor_x = editor_rows.get_row(self.cursor_y).len();
                 }
             }
             KeyCode::Down => {
@@ -97,11 +101,18 @@ impl CursorController {
                 }
             }
             KeyCode::Right => {
-                if self.cursor_y < number_of_rows
-                    && self.cursor_x < editor_rows.get_row(self.cursor_y).len()
-                {
-                    self.cursor_x += 1;
+                /* modify */
+                if self.cursor_y < number_of_rows {
+                    match self.cursor_x.cmp(&editor_rows.get_row(self.cursor_y).len()) {
+                        Ordering::Less => self.cursor_x += 1,
+                        Ordering::Equal => {
+                            self.cursor_y += 1;
+                            self.cursor_x = 0
+                        }
+                        _ => {}
+                    }
                 }
+                /* end */
             }
             KeyCode::End => self.cursor_x = self.screen_columns - 1,
             KeyCode::Home => self.cursor_x = 0,
