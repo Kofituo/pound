@@ -107,6 +107,12 @@ impl CursorController {
             KeyCode::Home => self.cursor_x = 0,
             _ => unimplemented!(),
         }
+        let row_len = if self.cursor_y < number_of_rows {
+            editor_rows.get_row(self.cursor_y).len()
+        } else {
+            0
+        };
+        self.cursor_x = cmp::min(self.cursor_x, row_len);
     }
 }
 
@@ -222,7 +228,7 @@ impl Output {
         self.cursor_controller.scroll();
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        let cursor_x = self.cursor_controller.cursor_x - self.cursor_controller.column_offset; //modify
+        let cursor_x = self.cursor_controller.cursor_x - self.cursor_controller.column_offset;
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
             self.editor_contents,
