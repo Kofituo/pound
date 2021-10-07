@@ -54,6 +54,7 @@ struct CursorController {
     cursor_y: usize,
     screen_rows: usize,
     screen_columns: usize,
+    row_offset: usize,
 }
 
 impl CursorController {
@@ -63,10 +64,18 @@ impl CursorController {
             cursor_y: 0,
             screen_columns: win_size.0,
             screen_rows: win_size.1,
+            row_offset: 0,
         }
     }
 
-    fn move_cursor(&mut self, direction: KeyCode) {
+    fn scroll(&mut self) {
+        self.row_offset = cmp::min(self.row_offset, self.cursor_y);
+        if self.cursor_y >= self.row_offset + self.screen_rows {
+            self.row_offset = self.cursor_y - self.screen_rows + 1;
+        }
+    }
+
+    fn move_cursor(&mut self, direction: KeyCode, number_of_rows: usize) {
         match direction {
             KeyCode::Up => {
                 self.cursor_y = self.cursor_y.saturating_sub(1);
@@ -77,7 +86,8 @@ impl CursorController {
                 }
             }
             KeyCode::Down => {
-                if self.cursor_y != self.screen_rows - 1 {
+                //modify
+                if self.cursor_y < number_of_rows {
                     self.cursor_y += 1;
                 }
             }
@@ -86,7 +96,6 @@ impl CursorController {
                     self.cursor_x += 1;
                 }
             }
-            /* add the following*/
             KeyCode::End => self.cursor_x = self.screen_columns - 1,
             KeyCode::Home => self.cursor_x = 0,
             _ => unimplemented!(),
@@ -162,7 +171,8 @@ impl Output {
         let screen_rows = self.win_size.1;
         let screen_columns = self.win_size.0;
         for i in 0..screen_rows {
-            if i >= self.editor_rows.number_of_rows() {
+            let file_row = i + self.cursor_controller.row_offset; // add line
+            if file_row >= self.editor_rows.number_of_rows() {
                 //modify
                 if self.editor_rows.number_of_rows() == 0 && i == screen_rows / 3 {
                     let mut welcome = format!("Pound Editor --- Version {}", VERSION);
@@ -180,9 +190,9 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                let len = cmp::min(self.editor_rows.get_row(i).len(), screen_columns); // modify
+                let len = cmp::min(self.editor_rows.get_row(file_row).len(), screen_columns); //modify
                 self.editor_contents
-                    .push_str(&self.editor_rows.get_row(i)[..len]) //modify
+                    .push_str(&self.editor_rows.get_row(file_row)[..len]) //modify
             }
             queue!(
                 self.editor_contents,
@@ -196,10 +206,13 @@ impl Output {
     }
 
     fn move_cursor(&mut self, direction: KeyCode) {
-        self.cursor_controller.move_cursor(direction);
+        //modify
+        self.cursor_controller
+            .move_cursor(direction, self.editor_rows.number_of_rows());
     }
 
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
+        self.cursor_controller.scroll(); // this line
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         let cursor_x = self.cursor_controller.cursor_x;
