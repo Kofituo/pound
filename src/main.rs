@@ -33,7 +33,7 @@ impl Row {
     }
 }
 struct EditorRows {
-    row_contents: Vec<Row>, // modify
+    row_contents: Vec<Row>,
 }
 
 impl EditorRows {
@@ -48,20 +48,16 @@ impl EditorRows {
 
     fn from_file(file: &Path) -> Self {
         let file_contents = fs::read_to_string(file).expect("Unable to read file");
-        let s = std::time::Instant::now();
-        let row_contents = file_contents
-            .lines()
-            .map(|it| {
-                let mut row = Row::new(it.into(), String::new());
-                Self::render_row(&mut row);
-                row
-            })
-            .collect();
-        let s = s.elapsed();
-        std::fs::write("render.txt", format!("{:?}", s)).unwrap();
-        /* modify */
-        Self { row_contents }
-        /* end */
+        Self {
+            row_contents: file_contents
+                .lines()
+                .map(|it| {
+                    let mut row = Row::new(it.into(), String::new());
+                    Self::render_row(&mut row);
+                    row
+                })
+                .collect(),
+        }
     }
 
     fn number_of_rows(&self) -> usize {
