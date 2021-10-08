@@ -28,7 +28,7 @@ impl StatusMessage {
     fn new(initial_message: String) -> Self {
         Self {
             message: Some(initial_message),
-            set_time: None,
+            set_time: Some(Instant::now()),
         }
     }
 
@@ -140,7 +140,7 @@ struct CursorController {
     screen_columns: usize,
     row_offset: usize,
     column_offset: usize,
-    render_x: usize, // add field
+    render_x: usize,
 }
 
 impl CursorController {
@@ -281,7 +281,7 @@ struct Output {
 impl Output {
     fn new() -> Self {
         let win_size = terminal::size()
-            .map(|(x, y)| (x as usize, y as usize - 1)) // modify
+            .map(|(x, y)| (x as usize, y as usize - 1))
             .unwrap();
         Self {
             win_size,
