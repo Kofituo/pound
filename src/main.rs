@@ -2,9 +2,10 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, terminal};
 use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{stdout, Write};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
@@ -65,10 +66,9 @@ impl EditorRows {
     }
 
     fn get_row(&self, at: usize) -> &str {
-        &self.row_contents[at].row_content // modify
+        &self.row_contents[at].row_content
     }
 
-    /* add functions */
     fn get_render(&self, at: usize) -> &String {
         &self.row_contents[at].render
     }
@@ -82,14 +82,12 @@ impl EditorRows {
         let capacity = row
             .row_content
             .chars()
-            //modify
             .fold(0, |acc, next| acc + if next == '\t' { TAB_STOP } else { 1 });
         row.render = String::with_capacity(capacity);
         row.row_content.chars().for_each(|c| {
             index += 1;
             if c == '\t' {
                 row.render.push(' ');
-                // modify
                 while index % TAB_STOP != 0 {
                     row.render.push(' ');
                     index += 1
@@ -120,7 +118,7 @@ impl CursorController {
             screen_rows: win_size.1,
             row_offset: 0,
             column_offset: 0,
-            render_x: 0, // initialize to 0
+            render_x: 0,
         }
     }
 
@@ -145,10 +143,9 @@ impl CursorController {
         if self.cursor_y >= self.row_offset + self.screen_rows {
             self.row_offset = self.cursor_y - self.screen_rows + 1;
         }
-        self.column_offset = cmp::min(self.column_offset, self.render_x); //modify
+        self.column_offset = cmp::min(self.column_offset, self.render_x);
         if self.render_x >= self.column_offset + self.screen_columns {
-            //modify
-            self.column_offset = self.render_x - self.screen_columns + 1; //modify
+            self.column_offset = self.render_x - self.screen_columns + 1;
         }
     }
 
@@ -306,10 +303,10 @@ impl Output {
     }
 
     fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        self.cursor_controller.scroll(&self.editor_rows); //modify
+        self.cursor_controller.scroll(&self.editor_rows);
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
-        let cursor_x = self.cursor_controller.render_x - self.cursor_controller.column_offset; // modify
+        let cursor_x = self.cursor_controller.render_x - self.cursor_controller.column_offset;
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
             self.editor_contents,
@@ -368,13 +365,26 @@ impl Editor {
             KeyEvent {
                 code: val @ (KeyCode::PageUp | KeyCode::PageDown),
                 modifiers: KeyModifiers::NONE,
-            } => (0..self.output.win_size.1).for_each(|_| {
-                self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
-                    KeyCode::Up
+            } => {
+                /* add the following */
+                if matches!(val, KeyCode::PageUp) {
+                    self.output.cursor_controller.cursor_y =
+                        self.output.cursor_controller.row_offset
                 } else {
-                    KeyCode::Down
-                });
-            }),
+                    self.output.cursor_controller.cursor_y = cmp::min(
+                        self.output.win_size.1 + self.output.cursor_controller.row_offset - 1,
+                        self.output.editor_rows.number_of_rows(),
+                    );
+                }
+                /* end */
+                (0..self.output.win_size.1).for_each(|_| {
+                    self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
+                        KeyCode::Up
+                    } else {
+                        KeyCode::Down
+                    });
+                })
+            }
             _ => {}
         }
         Ok(true)
