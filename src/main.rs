@@ -4,7 +4,7 @@ use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
 use std::io::{stdout, Write};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant}; // add import
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
