@@ -4,7 +4,7 @@ use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
 use std::io::{stdout, Write};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
@@ -16,6 +16,38 @@ impl Drop for CleanUp {
     fn drop(&mut self) {
         terminal::disable_raw_mode().expect("Unable to disable raw mode");
         Output::clear_screen().expect("error");
+    }
+}
+
+struct StatusMessage {
+    message: Option<String>,
+    set_time: Option<Instant>,
+}
+
+impl StatusMessage {
+    fn new(initial_message: String) -> Self {
+        Self {
+            message: Some(initial_message),
+            set_time: None,
+        }
+    }
+
+    fn set_message(&mut self, message: String) {
+        self.message = Some(message);
+        self.set_time = Some(Instant::now())
+    }
+
+    /* add function */
+    fn message(&mut self) -> Option<&String> {
+        self.set_time.and_then(|time| {
+            if time.elapsed() > Duration::from_secs(5) {
+                self.message = None;
+                self.set_time = None;
+                None
+            } else {
+                Some(self.message.as_ref().unwrap())
+            }
+        })
     }
 }
 
