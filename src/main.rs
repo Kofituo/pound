@@ -37,7 +37,6 @@ impl StatusMessage {
         self.set_time = Some(Instant::now())
     }
 
-    /* add function */
     fn message(&mut self) -> Option<&String> {
         self.set_time.and_then(|time| {
             if time.elapsed() > Duration::from_secs(5) {
@@ -276,24 +275,38 @@ struct Output {
     editor_contents: EditorContents,
     cursor_controller: CursorController,
     editor_rows: EditorRows,
+    status_message: StatusMessage,
 }
 
 impl Output {
     fn new() -> Self {
         let win_size = terminal::size()
-            .map(|(x, y)| (x as usize, y as usize - 1))
+            .map(|(x, y)| (x as usize, y as usize - 2)) //modify
             .unwrap();
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
             editor_rows: EditorRows::new(),
+            status_message: StatusMessage::new("HELP: Ctrl-Q = Quit".into()),
         }
     }
 
     fn clear_screen() -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))?;
         execute!(stdout(), cursor::MoveTo(0, 0))
+    }
+
+    fn draw_message_bar(&mut self) {
+        queue!(
+            self.editor_contents,
+            terminal::Clear(ClearType::UntilNewLine)
+        )
+        .unwrap();
+        if let Some(msg) = self.status_message.message() {
+            self.editor_contents
+                .push_str(&msg[..cmp::min(self.win_size.0, msg.len())]);
+        }
     }
 
     fn draw_status_bar(&mut self) {
@@ -310,7 +323,6 @@ impl Output {
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
-        /* add the following*/
         let line_info = format!(
             "{}/{}",
             self.cursor_controller.cursor_y + 1,
@@ -325,9 +337,9 @@ impl Output {
                 self.editor_contents.push(' ')
             }
         }
-        /* end */
         self.editor_contents
             .push_str(&style::Attribute::Reset.to_string());
+        self.editor_contents.push_str("\r\n"); // add line
     }
 
     fn draw_rows(&mut self) {
@@ -363,9 +375,7 @@ impl Output {
                 terminal::Clear(ClearType::UntilNewLine)
             )
             .unwrap();
-            /*comment out this line*///if i < screen_rows - 1 {
             self.editor_contents.push_str("\r\n");
-            //}
         }
     }
 
@@ -379,6 +389,7 @@ impl Output {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         self.draw_status_bar();
+        self.draw_message_bar(); // add line
         let cursor_x = self.cursor_controller.render_x - self.cursor_controller.column_offset;
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
