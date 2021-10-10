@@ -146,8 +146,8 @@ impl EditorRows {
         self.row_contents.push(Row::default());
     }
 
-    /* add saving */
-    fn save(&self) -> io::Result<()> {
+    fn save(&self) -> io::Result<usize> {
+        //modify
         match &self.filename {
             None => Err(io::Error::new(ErrorKind::Other, "no file name specified")),
             Some(name) => {
@@ -159,7 +159,8 @@ impl EditorRows {
                     .collect::<Vec<&str>>()
                     .join("\n");
                 file.set_len(contents.len() as u64)?;
-                file.write_all(contents.as_bytes())
+                file.write_all(contents.as_bytes())?; // modify
+                Ok(contents.len()) // add line
             }
         }
     }
@@ -314,7 +315,7 @@ struct Output {
 impl Output {
     fn new() -> Self {
         let win_size = terminal::size()
-            .map(|(x, y)| (x as usize, y as usize - 2)) //modify
+            .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
         Self {
             win_size,
@@ -510,11 +511,15 @@ impl Editor {
                     });
                 })
             }
-            /* add the following */
+            /* modify */
             KeyEvent {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
-            } => self.output.editor_rows.save()?,
+            } => self.output.editor_rows.save().map(|len| {
+                self.output
+                    .status_message
+                    .set_message(format!("{} bytes written to disk", len));
+            })?,
             /* end */
             KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
