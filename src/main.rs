@@ -4,7 +4,7 @@ use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
 use std::io::{stdout, Write};
 use std::path::PathBuf;
-use std::time::{Duration, Instant}; // add import
+use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
 
 const VERSION: &str = "0.0.1";
@@ -50,19 +50,28 @@ impl StatusMessage {
     }
 }
 
+#[derive(Default)] //add line
 struct Row {
-    row_content: Box<str>,
+    row_content: String,
     render: String,
 }
 
 impl Row {
-    fn new(row_content: Box<str>, render: String) -> Self {
+    //modify
+    fn new(row_content: String, render: String) -> Self {
         Self {
             row_content,
             render,
         }
     }
+
+    /* add function*/
+    fn insert_char(&mut self, at: usize, ch: char) {
+        self.row_content.insert(at, ch);
+        EditorRows::render_row(self)
+    }
 }
+
 struct EditorRows {
     row_contents: Vec<Row>,
     filename: Option<PathBuf>,
@@ -110,6 +119,10 @@ impl EditorRows {
         &self.row_contents[at]
     }
 
+    fn get_editor_row_mut(&mut self, at: usize) -> &mut Row {
+        &mut self.row_contents[at]
+    }
+
     fn render_row(row: &mut Row) {
         let mut index = 0;
         let capacity = row
@@ -129,6 +142,11 @@ impl EditorRows {
                 row.render.push(c);
             }
         });
+    }
+
+    /* add function */
+    fn insert_row(&mut self) {
+        self.row_contents.push(Row::default());
     }
 }
 
@@ -309,6 +327,16 @@ impl Output {
         }
     }
 
+    fn insert_char(&mut self, ch: char) {
+        if self.cursor_controller.cursor_y == self.editor_rows.number_of_rows() {
+            self.editor_rows.insert_row()
+        }
+        self.editor_rows
+            .get_editor_row_mut(self.cursor_controller.cursor_y)
+            .insert_char(self.cursor_controller.cursor_x, ch);
+        self.cursor_controller.cursor_x += 1;
+    }
+
     fn draw_status_bar(&mut self) {
         self.editor_contents
             .push_str(&style::Attribute::Reverse.to_string());
@@ -389,7 +417,7 @@ impl Output {
         queue!(self.editor_contents, cursor::Hide, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         self.draw_status_bar();
-        self.draw_message_bar(); // add line
+        self.draw_message_bar();
         let cursor_x = self.cursor_controller.render_x - self.cursor_controller.column_offset;
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
         queue!(
@@ -450,7 +478,6 @@ impl Editor {
                 code: val @ (KeyCode::PageUp | KeyCode::PageDown),
                 modifiers: KeyModifiers::NONE,
             } => {
-                /* add the following */
                 if matches!(val, KeyCode::PageUp) {
                     self.output.cursor_controller.cursor_y =
                         self.output.cursor_controller.row_offset
@@ -460,7 +487,6 @@ impl Editor {
                         self.output.editor_rows.number_of_rows(),
                     );
                 }
-                /* end */
                 (0..self.output.win_size.1).for_each(|_| {
                     self.output.move_cursor(if matches!(val, KeyCode::PageUp) {
                         KeyCode::Up
@@ -469,6 +495,12 @@ impl Editor {
                     });
                 })
             }
+            /* add the following */
+            KeyEvent {
+                code: KeyCode::Char(ch),
+                modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
+            } => self.output.insert_char(ch),
+            /* end */
             _ => {}
         }
         Ok(true)
