@@ -160,7 +160,7 @@ impl EditorRows {
                     .join("\n");
                 file.set_len(contents.len() as u64)?;
                 file.write_all(contents.as_bytes())?; // modify
-                Ok(contents.len()) // add line
+                Ok(contents.as_bytes().len()) // add line
             }
         }
     }
@@ -322,7 +322,7 @@ impl Output {
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
             editor_rows: EditorRows::new(),
-            status_message: StatusMessage::new("HELP: Ctrl-Q = Quit".into()),
+            status_message: StatusMessage::new("HELP: Ctrl-S = Save | Ctrl-Q = Quit ".into()), //modify
         }
     }
 
