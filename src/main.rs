@@ -2,7 +2,7 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
-use std::io::{stdout, Write};
+use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
@@ -50,14 +50,13 @@ impl StatusMessage {
     }
 }
 
-#[derive(Default)] //add line
+#[derive(Default)]
 struct Row {
     row_content: String,
     render: String,
 }
 
 impl Row {
-    //modify
     fn new(row_content: String, render: String) -> Self {
         Self {
             row_content,
@@ -65,7 +64,6 @@ impl Row {
         }
     }
 
-    /* add function*/
     fn insert_char(&mut self, at: usize, ch: char) {
         self.row_content.insert(at, ch);
         EditorRows::render_row(self)
@@ -144,9 +142,26 @@ impl EditorRows {
         });
     }
 
-    /* add function */
     fn insert_row(&mut self) {
         self.row_contents.push(Row::default());
+    }
+
+    /* add saving */
+    fn save(&self) -> io::Result<()> {
+        match &self.filename {
+            None => Err(io::Error::new(ErrorKind::Other, "no file name specified")),
+            Some(name) => {
+                let mut file = fs::OpenOptions::new().write(true).create(true).open(name)?;
+                let contents: String = self
+                    .row_contents
+                    .iter()
+                    .map(|it| it.row_content.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+                file.set_len(contents.len() as u64)?;
+                file.write_all(contents.as_bytes())
+            }
+        }
     }
 }
 
@@ -497,10 +512,18 @@ impl Editor {
             }
             /* add the following */
             KeyEvent {
-                code: KeyCode::Char(ch),
-                modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
-            } => self.output.insert_char(ch),
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::CONTROL,
+            } => self.output.editor_rows.save()?,
             /* end */
+            KeyEvent {
+                code: code @ (KeyCode::Char(..) | KeyCode::Tab),
+                modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
+            } => self.output.insert_char(match code {
+                KeyCode::Tab => '\t',
+                KeyCode::Char(ch) => ch,
+                _ => unreachable!(),
+            }),
             _ => {}
         }
         Ok(true)
