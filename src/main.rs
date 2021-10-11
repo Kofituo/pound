@@ -148,7 +148,6 @@ impl EditorRows {
         });
     }
 
-    /* modify */
     fn insert_row(&mut self, at: usize, contents: String) {
         let mut new_row = Row::new(contents, String::new());
         EditorRows::render_row(&mut new_row);
@@ -317,6 +316,38 @@ impl io::Write for EditorContents {
         self.content.clear();
         out
     }
+}
+
+macro_rules! prompt {
+    ($output:expr,$($args:tt)*) => {{
+        let output:&mut Output = &mut $output;
+        let mut input = String::with_capacity(32);
+        loop {
+            output.status_message.set_message(format!($($args)*, input));
+            output.refresh_screen()?;
+            match Reader.read_key()? {
+                KeyEvent {
+                    code:KeyCode::Enter,
+                    modifiers:KeyModifiers::NONE
+                } => {
+                    if !input.is_empty() {
+                        output.status_message.set_message(String::new());
+                        break;
+                    }
+                }
+                KeyEvent {
+                    code: code @ (KeyCode::Char(..) | KeyCode::Tab),
+                    modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
+                } => input.push(match code {
+                        KeyCode::Tab => '\t',
+                        KeyCode::Char(ch) => ch,
+                        _ => unreachable!(),
+                    }),
+                _=> {}
+            }
+        }
+        if input.is_empty() { None } else { Some (input) }
+    }};
 }
 
 struct Output {
@@ -608,12 +639,10 @@ impl Editor {
                 }
                 self.output.delete_char()
             }
-            /* add the following */
             KeyEvent {
                 code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
             } => self.output.insert_newline(),
-            /* end */
             KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
