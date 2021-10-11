@@ -309,7 +309,7 @@ struct Output {
     cursor_controller: CursorController,
     editor_rows: EditorRows,
     status_message: StatusMessage,
-    dirty: u64, // add line
+    dirty: u64,
 }
 
 impl Output {
@@ -323,7 +323,7 @@ impl Output {
             cursor_controller: CursorController::new(win_size),
             editor_rows: EditorRows::new(),
             status_message: StatusMessage::new("HELP: Ctrl-S = Save | Ctrl-Q = Quit ".into()),
-            dirty: 0, // add line
+            dirty: 0,
         }
     }
 
@@ -346,26 +346,28 @@ impl Output {
 
     fn insert_char(&mut self, ch: char) {
         if self.cursor_controller.cursor_y == self.editor_rows.number_of_rows() {
-            self.editor_rows.insert_row()
+            self.editor_rows.insert_row(); // modify
+            self.dirty += 1; // add line
         }
         self.editor_rows
             .get_editor_row_mut(self.cursor_controller.cursor_y)
             .insert_char(self.cursor_controller.cursor_x, ch);
         self.cursor_controller.cursor_x += 1;
+        self.dirty += 1; // add line
     }
 
     fn draw_status_bar(&mut self) {
         self.editor_contents
             .push_str(&style::Attribute::Reverse.to_string());
         let info = format!(
-            "{} {} -- {} lines", //modify
+            "{} {} -- {} lines",
             self.editor_rows
                 .filename
                 .as_ref()
                 .and_then(|path| path.file_name())
                 .and_then(|name| name.to_str())
                 .unwrap_or("[No Name]"),
-            if self.dirty > 0 { "(modified)" } else { "" }, // add line
+            if self.dirty > 0 { "(modified)" } else { "" },
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
