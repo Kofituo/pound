@@ -39,21 +39,16 @@ macro_rules! prompt {
                     }
                 }
                 KeyEvent {
-                    code: KeyCode::Esc,
-                    ..
+                    code: KeyCode::Esc, ..
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
                     break;
                 }
-                /* add the following */
                 KeyEvent {
                     code: KeyCode::Backspace | KeyCode::Delete,
                     modifiers: KeyModifiers::NONE,
-                } =>  {
-                    input.pop();
-                }
-                /* end */
+                } => { input.pop(); }
                 KeyEvent {
                     code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                     modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
@@ -62,7 +57,6 @@ macro_rules! prompt {
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
                     }),
-
                 _=> {}
             }
         }
@@ -143,7 +137,7 @@ impl EditorRows {
     }
 
     fn from_file(file: PathBuf) -> Self {
-        let file_contents = fs::read_to_string(&file).expect("Unable to read file"); //modify
+        let file_contents = fs::read_to_string(&file).expect("Unable to read file");
         Self {
             filename: Some(file),
             row_contents: file_contents
@@ -643,7 +637,6 @@ impl Editor {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
             } => {
-                /* modify */
                 if matches!(self.output.editor_rows.filename, None) {
                     let prompt = prompt!(&mut self.output, "Save as : {} (ESC to cancel)")
                         .map(|it| it.into());
