@@ -147,7 +147,6 @@ impl EditorRows {
     }
 
     fn save(&self) -> io::Result<usize> {
-        //modify
         match &self.filename {
             None => Err(io::Error::new(ErrorKind::Other, "no file name specified")),
             Some(name) => {
@@ -159,8 +158,8 @@ impl EditorRows {
                     .collect::<Vec<&str>>()
                     .join("\n");
                 file.set_len(contents.len() as u64)?;
-                file.write_all(contents.as_bytes())?; // modify
-                Ok(contents.as_bytes().len()) // add line
+                file.write_all(contents.as_bytes())?;
+                Ok(contents.as_bytes().len())
             }
         }
     }
@@ -310,6 +309,7 @@ struct Output {
     cursor_controller: CursorController,
     editor_rows: EditorRows,
     status_message: StatusMessage,
+    dirty: u64, // add line
 }
 
 impl Output {
@@ -322,7 +322,8 @@ impl Output {
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
             editor_rows: EditorRows::new(),
-            status_message: StatusMessage::new("HELP: Ctrl-S = Save | Ctrl-Q = Quit ".into()), //modify
+            status_message: StatusMessage::new("HELP: Ctrl-S = Save | Ctrl-Q = Quit ".into()),
+            dirty: 0, // add line
         }
     }
 
@@ -357,13 +358,14 @@ impl Output {
         self.editor_contents
             .push_str(&style::Attribute::Reverse.to_string());
         let info = format!(
-            "{} -- {} lines",
+            "{} {} -- {} lines", //modify
             self.editor_rows
                 .filename
                 .as_ref()
                 .and_then(|path| path.file_name())
                 .and_then(|name| name.to_str())
                 .unwrap_or("[No Name]"),
+            if self.dirty > 0 { "(modified)" } else { "" }, // add line
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
@@ -383,7 +385,7 @@ impl Output {
         }
         self.editor_contents
             .push_str(&style::Attribute::Reset.to_string());
-        self.editor_contents.push_str("\r\n"); // add line
+        self.editor_contents.push_str("\r\n");
     }
 
     fn draw_rows(&mut self) {
@@ -511,7 +513,6 @@ impl Editor {
                     });
                 })
             }
-            /* modify */
             KeyEvent {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
@@ -520,7 +521,6 @@ impl Editor {
                     .status_message
                     .set_message(format!("{} bytes written to disk", len));
             })?,
-            /* end */
             KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
