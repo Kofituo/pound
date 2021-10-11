@@ -20,6 +20,39 @@ impl Drop for CleanUp {
     }
 }
 
+#[macro_export]
+macro_rules! prompt {
+    ($output:expr,$($args:tt)*) => {{
+        let output:&mut Output = $output;
+        let mut input = String::with_capacity(32);
+        loop {
+            output.status_message.set_message(format!($($args)*, input));
+            output.refresh_screen()?;
+            match Reader.read_key()? {
+                KeyEvent {
+                    code:KeyCode::Enter,
+                    modifiers:KeyModifiers::NONE
+                } => {
+                    if !input.is_empty() {
+                        output.status_message.set_message(String::new());
+                        break;
+                    }
+                }
+                KeyEvent {
+                    code: code @ (KeyCode::Char(..) | KeyCode::Tab),
+                    modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
+                } => input.push(match code {
+                        KeyCode::Tab => '\t',
+                        KeyCode::Char(ch) => ch,
+                        _ => unreachable!(),
+                    }),
+                _=> {}
+            }
+        }
+        if input.is_empty() { None } else { Some (input) }
+    }};
+}
+
 struct StatusMessage {
     message: Option<String>,
     set_time: Option<Instant>,
@@ -154,7 +187,7 @@ impl EditorRows {
         self.row_contents.insert(at, new_row);
     }
 
-    fn save(&self) -> io::Result<usize> {
+    fn save(&mut self) -> io::Result<usize> {
         match &self.filename {
             None => Err(io::Error::new(ErrorKind::Other, "no file name specified")),
             Some(name) => {
@@ -316,38 +349,6 @@ impl io::Write for EditorContents {
         self.content.clear();
         out
     }
-}
-
-macro_rules! prompt {
-    ($output:expr,$($args:tt)*) => {{
-        let output:&mut Output = &mut $output;
-        let mut input = String::with_capacity(32);
-        loop {
-            output.status_message.set_message(format!($($args)*, input));
-            output.refresh_screen()?;
-            match Reader.read_key()? {
-                KeyEvent {
-                    code:KeyCode::Enter,
-                    modifiers:KeyModifiers::NONE
-                } => {
-                    if !input.is_empty() {
-                        output.status_message.set_message(String::new());
-                        break;
-                    }
-                }
-                KeyEvent {
-                    code: code @ (KeyCode::Char(..) | KeyCode::Tab),
-                    modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
-                } => input.push(match code {
-                        KeyCode::Tab => '\t',
-                        KeyCode::Char(ch) => ch,
-                        _ => unreachable!(),
-                    }),
-                _=> {}
-            }
-        }
-        if input.is_empty() { None } else { Some (input) }
-    }};
 }
 
 struct Output {
@@ -624,12 +625,19 @@ impl Editor {
             KeyEvent {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
-            } => self.output.editor_rows.save().map(|len| {
-                self.output
-                    .status_message
-                    .set_message(format!("{} bytes written to disk", len));
-                self.output.dirty = 0
-            })?,
+            } => {
+                /* add condition */
+                if matches!(self.output.editor_rows.filename, None) {
+                    self.output.editor_rows.filename =
+                        prompt!(&mut self.output, "Save as : {}").map(|it| it.into());
+                }
+                self.output.editor_rows.save().map(|len| {
+                    self.output
+                        .status_message
+                        .set_message(format!("{} bytes written to disk", len));
+                    self.output.dirty = 0
+                })?;
+            }
             KeyEvent {
                 code: key @ (KeyCode::Backspace | KeyCode::Delete),
                 modifiers: KeyModifiers::NONE,
