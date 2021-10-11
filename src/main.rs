@@ -39,6 +39,22 @@ macro_rules! prompt {
                     }
                 }
                 KeyEvent {
+                    code: KeyCode::Esc,
+                    ..
+                } => {
+                    output.status_message.set_message(String::new());
+                    input.clear();
+                    break;
+                }
+                /* add the following */
+                KeyEvent {
+                    code: KeyCode::Backspace | KeyCode::Delete,
+                    modifiers: KeyModifiers::NONE,
+                } =>  {
+                    input.pop();
+                }
+                /* end */
+                KeyEvent {
                     code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                     modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
                 } => input.push(match code {
@@ -46,6 +62,7 @@ macro_rules! prompt {
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
                     }),
+
                 _=> {}
             }
         }
@@ -626,10 +643,17 @@ impl Editor {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
             } => {
-                /* add condition */
+                /* modify */
                 if matches!(self.output.editor_rows.filename, None) {
-                    self.output.editor_rows.filename =
-                        prompt!(&mut self.output, "Save as : {}").map(|it| it.into());
+                    let prompt = prompt!(&mut self.output, "Save as : {} (ESC to cancel)")
+                        .map(|it| it.into());
+                    if let None = prompt {
+                        self.output
+                            .status_message
+                            .set_message("Save Aborted".into());
+                        return Ok(true);
+                    }
+                    self.output.editor_rows.filename = prompt
                 }
                 self.output.editor_rows.save().map(|len| {
                     self.output
