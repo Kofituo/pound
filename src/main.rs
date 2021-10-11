@@ -69,6 +69,12 @@ impl Row {
         self.row_content.insert(at, ch);
         EditorRows::render_row(self)
     }
+
+    /* add function */
+    fn delete_char(&mut self, at: usize) {
+        self.row_content.remove(at);
+        EditorRows::render_row(self)
+    }
 }
 
 struct EditorRows {
@@ -345,16 +351,30 @@ impl Output {
         }
     }
 
+    fn delete_char(&mut self) {
+        if self.cursor_controller.cursor_y == self.editor_rows.number_of_rows() {
+            return;
+        }
+        let row = self
+            .editor_rows
+            .get_editor_row_mut(self.cursor_controller.cursor_y);
+        if self.cursor_controller.cursor_x > 0 {
+            row.delete_char(self.cursor_controller.cursor_x - 1);
+            self.cursor_controller.cursor_x -= 1;
+            self.dirty += 1;
+        }
+    }
+
     fn insert_char(&mut self, ch: char) {
         if self.cursor_controller.cursor_y == self.editor_rows.number_of_rows() {
-            self.editor_rows.insert_row(); // modify
-            self.dirty += 1; // add line
+            self.editor_rows.insert_row();
+            self.dirty += 1;
         }
         self.editor_rows
             .get_editor_row_mut(self.cursor_controller.cursor_y)
             .insert_char(self.cursor_controller.cursor_x, ch);
         self.cursor_controller.cursor_x += 1;
-        self.dirty += 1; // add line
+        self.dirty += 1;
     }
 
     fn draw_status_bar(&mut self) {
@@ -475,7 +495,7 @@ impl Editor {
         Self {
             reader: Reader,
             output: Output::new(),
-            quit_times: QUIT_TIMES, // add line
+            quit_times: QUIT_TIMES,
         }
     }
 
@@ -485,7 +505,6 @@ impl Editor {
                 code: KeyCode::Char('q'),
                 modifiers: KeyModifiers::CONTROL,
             } => {
-                /* add following */
                 if self.output.dirty > 0 && self.quit_times > 0 {
                     self.output.status_message.set_message(format!(
                         "WARNING!!! File has unsaved changes. Press Ctrl-Q {} more times to quit.",
@@ -494,7 +513,6 @@ impl Editor {
                     self.quit_times -= 1;
                     return Ok(true);
                 }
-                /* end */
                 return Ok(false);
             }
             KeyEvent {
@@ -539,6 +557,17 @@ impl Editor {
                     .set_message(format!("{} bytes written to disk", len));
                 self.output.dirty = 0
             })?,
+            /* add the following */
+            KeyEvent {
+                code: key @ (KeyCode::Backspace | KeyCode::Delete),
+                modifiers: KeyModifiers::NONE,
+            } => {
+                if matches!(key, KeyCode::Delete) {
+                    self.output.move_cursor(KeyCode::Right)
+                }
+                self.output.delete_char()
+            }
+            /* end */
             KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
