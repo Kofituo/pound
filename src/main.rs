@@ -70,7 +70,6 @@ impl Row {
         EditorRows::render_row(self)
     }
 
-    /* add function */
     fn delete_char(&mut self, at: usize) {
         self.row_content.remove(at);
         EditorRows::render_row(self)
@@ -169,6 +168,14 @@ impl EditorRows {
                 Ok(contents.as_bytes().len())
             }
         }
+    }
+
+    /* add function */
+    fn join_adjacent_rows(&mut self, at: usize) {
+        let current_row = self.row_contents.remove(at);
+        let previous_row = self.get_editor_row_mut(at - 1);
+        previous_row.row_content.push_str(&current_row.row_content);
+        Self::render_row(previous_row);
     }
 }
 
@@ -355,14 +362,29 @@ impl Output {
         if self.cursor_controller.cursor_y == self.editor_rows.number_of_rows() {
             return;
         }
+        if self.cursor_controller.cursor_y == 0 && self.cursor_controller.cursor_x == 0 {
+            return;
+        }
         let row = self
             .editor_rows
             .get_editor_row_mut(self.cursor_controller.cursor_y);
         if self.cursor_controller.cursor_x > 0 {
             row.delete_char(self.cursor_controller.cursor_x - 1);
             self.cursor_controller.cursor_x -= 1;
-            self.dirty += 1;
+            //self.dirty += 1; comment out this line
         }
+        /*add the following*/
+        else {
+            let previous_row_content = self
+                .editor_rows
+                .get_row(self.cursor_controller.cursor_y - 1);
+            self.cursor_controller.cursor_x = previous_row_content.len();
+            self.editor_rows
+                .join_adjacent_rows(self.cursor_controller.cursor_y);
+            self.cursor_controller.cursor_y -= 1;
+        }
+        self.dirty += 1;
+        /* end */
     }
 
     fn insert_char(&mut self, ch: char) {
@@ -487,7 +509,7 @@ impl Reader {
 struct Editor {
     reader: Reader,
     output: Output,
-    quit_times: u8, // add line
+    quit_times: u8,
 }
 
 impl Editor {
@@ -557,7 +579,6 @@ impl Editor {
                     .set_message(format!("{} bytes written to disk", len));
                 self.output.dirty = 0
             })?,
-            /* add the following */
             KeyEvent {
                 code: key @ (KeyCode::Backspace | KeyCode::Delete),
                 modifiers: KeyModifiers::NONE,
@@ -567,7 +588,6 @@ impl Editor {
                 }
                 self.output.delete_char()
             }
-            /* end */
             KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
