@@ -24,7 +24,7 @@ impl Drop for CleanUp {
 macro_rules! prompt {
     /* add following lines*/
     ($output:expr,$args:tt) => {
-        prompt!($output, $args, callback = |_, _| {})
+        prompt!($output, $args, callback = |&_, _, _| {})
     };
     /* end */
     //modify
@@ -41,7 +41,7 @@ macro_rules! prompt {
                 } => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
-                        $callback(&input, KeyCode::Enter); // add line
+                        $callback(output, &input, KeyCode::Enter); // add line
                         break;
                     }
                 }
@@ -50,7 +50,7 @@ macro_rules! prompt {
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
-                    $callback(&input, KeyCode::Esc); //add line
+                    $callback(output, &input, KeyCode::Esc); //add line
                     break;
                 }
                 KeyEvent {
@@ -68,9 +68,9 @@ macro_rules! prompt {
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
                     });
-                    $callback(&input, code) //add line
+                    $callback(output, &input, code) //add line
                 }
-                KeyEvent { code, .. } => $callback(&input, code), // add line
+                KeyEvent { code, .. } => $callback(output, &input, code), // add line
             }
         }
         if input.is_empty() {
@@ -424,19 +424,29 @@ impl Output {
         execute!(stdout(), cursor::MoveTo(0, 0))
     }
 
-    /* modify */
-    fn find(&mut self) -> io::Result<()> {
-        if let Some(keyword) = prompt!(self, "Search: {} (ESC to cancel)") {
-            for i in 0..self.editor_rows.number_of_rows() {
-                let row = self.editor_rows.get_editor_row(i);
-                if let Some(index) = row.render.find(&keyword) {
-                    self.cursor_controller.cursor_y = i;
-                    self.cursor_controller.cursor_x = row.get_row_content_x(index);
-                    self.cursor_controller.row_offset = self.editor_rows.number_of_rows();
-                    break;
+    fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
+        match key_code {
+            KeyCode::Esc | KeyCode::Enter => {}
+            _ => {
+                for i in 0..output.editor_rows.number_of_rows() {
+                    let row = output.editor_rows.get_editor_row(i);
+                    if let Some(index) = row.render.find(&keyword) {
+                        output.cursor_controller.cursor_y = i;
+                        output.cursor_controller.cursor_x = row.get_row_content_x(index);
+                        output.cursor_controller.row_offset = output.editor_rows.number_of_rows();
+                        break;
+                    }
                 }
             }
         }
+    }
+
+    fn find(&mut self) -> io::Result<()> {
+        prompt!(
+            self,
+            "Search: {} (ESC to cancel)",
+            callback = Output::find_callback
+        );
         Ok(())
     }
 
