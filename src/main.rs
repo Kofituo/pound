@@ -22,17 +22,14 @@ impl Drop for CleanUp {
 
 #[macro_export]
 macro_rules! prompt {
-    /* add following lines*/
     ($output:expr,$args:tt) => {
         prompt!($output, $args, callback = |&_, _, _| {})
     };
-    /* end */
-    //modify
     ($output:expr,$args:tt, callback = $callback:expr) => {{
         let output: &mut Output = $output;
         let mut input = String::with_capacity(32);
         loop {
-            output.status_message.set_message(format!($args, input)); //modify
+            output.status_message.set_message(format!($args, input));
             output.refresh_screen()?;
             match Reader.read_key()? {
                 KeyEvent {
@@ -41,7 +38,7 @@ macro_rules! prompt {
                 } => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
-                        $callback(output, &input, KeyCode::Enter); // add line
+                        $callback(output, &input, KeyCode::Enter);
                         break;
                     }
                 }
@@ -50,7 +47,7 @@ macro_rules! prompt {
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
-                    $callback(output, &input, KeyCode::Esc); //add line
+                    $callback(output, &input, KeyCode::Esc);
                     break;
                 }
                 KeyEvent {
@@ -68,7 +65,7 @@ macro_rules! prompt {
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
                     });
-                    $callback(output, &input, code) //add line
+                    $callback(output, &input, code)
                 }
                 KeyEvent { code, .. } => $callback(output, &input, code), // add line
             }
@@ -255,6 +252,7 @@ impl EditorRows {
     }
 }
 
+#[derive(Copy, Clone)]
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
@@ -442,11 +440,14 @@ impl Output {
     }
 
     fn find(&mut self) -> io::Result<()> {
-        prompt!(
+        let cursor_controller = self.cursor_controller;
+        if let None = prompt!(
             self,
             "Search: {} (ESC to cancel)",
             callback = Output::find_callback
-        );
+        ) {
+            self.cursor_controller = cursor_controller;
+        }
         Ok(())
     }
 
