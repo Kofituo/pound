@@ -2,7 +2,6 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
-use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -21,26 +20,28 @@ impl Drop for CleanUp {
     }
 }
 
-fn test() {}
-
 #[macro_export]
 macro_rules! prompt {
-    ($output:expr,$($args:tt)*) => {
-        prompt!($output:expr,$($args:tt)*, callback = None)
+    /* add following lines*/
+    ($output:expr,$args:tt) => {
+        prompt!($output, $args, callback = |_, _| {})
     };
-    ($output:expr,$($args:tt)*, callback = Some($callback:expr)) => {{
-        let output:&mut Output = $output;
+    /* end */
+    //modify
+    ($output:expr,$args:tt, callback = $callback:expr) => {{
+        let output: &mut Output = $output;
         let mut input = String::with_capacity(32);
         loop {
-            output.status_message.set_message(format!($($args)*, input));
+            output.status_message.set_message(format!($args, input)); //modify
             output.refresh_screen()?;
             match Reader.read_key()? {
                 KeyEvent {
-                    code:KeyCode::Enter,
-                    modifiers:KeyModifiers::NONE
+                    code: KeyCode::Enter,
+                    modifiers: KeyModifiers::NONE,
                 } => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
+                        $callback(&input, KeyCode::Enter); // add line
                         break;
                     }
                 }
@@ -49,24 +50,34 @@ macro_rules! prompt {
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
+                    $callback(&input, KeyCode::Esc); //add line
                     break;
                 }
                 KeyEvent {
                     code: KeyCode::Backspace | KeyCode::Delete,
                     modifiers: KeyModifiers::NONE,
-                } => { input.pop(); }
+                } => {
+                    input.pop();
+                }
                 KeyEvent {
                     code: code @ (KeyCode::Char(..) | KeyCode::Tab),
                     modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
-                } => input.push(match code {
+                } => {
+                    input.push(match code {
                         KeyCode::Tab => '\t',
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
-                    }),
-                _=> {}
+                    });
+                    $callback(&input, code) //add line
+                }
+                KeyEvent { code, .. } => $callback(&input, code), // add line
             }
         }
-        if input.is_empty() { None } else { Some (input) }
+        if input.is_empty() {
+            None
+        } else {
+            Some(input)
+        }
     }};
 }
 
@@ -728,16 +739,7 @@ impl Editor {
     }
 
     fn run(&mut self) -> crossterm::Result<bool> {
-        let y = Instant::now();
         self.output.refresh_screen()?;
-        let y = y.elapsed();
-        OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open("render.txt")
-            .unwrap()
-            .write_all(format!("{:?}\n", y).as_bytes())
-            .unwrap();
         self.process_keypress()
     }
 }
