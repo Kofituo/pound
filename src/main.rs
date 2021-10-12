@@ -2,6 +2,7 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -20,9 +21,14 @@ impl Drop for CleanUp {
     }
 }
 
+fn test() {}
+
 #[macro_export]
 macro_rules! prompt {
-    ($output:expr,$($args:tt)*) => {{
+    ($output:expr,$($args:tt)*) => {
+        prompt!($output:expr,$($args:tt)*, callback = None)
+    };
+    ($output:expr,$($args:tt)*, callback = Some($callback:expr)) => {{
         let output:&mut Output = $output;
         let mut input = String::with_capacity(32);
         loop {
@@ -117,6 +123,20 @@ impl Row {
     fn delete_char(&mut self, at: usize) {
         self.row_content.remove(at);
         EditorRows::render_row(self)
+    }
+
+    fn get_row_content_x(&self, render_x: usize) -> usize {
+        let mut current_render_x = 0;
+        for (cursor_x, ch) in self.row_content.chars().enumerate() {
+            if ch == '\t' {
+                current_render_x += (TAB_STOP - 1) - (current_render_x % TAB_STOP);
+            }
+            current_render_x += 1;
+            if current_render_x > render_x {
+                return cursor_x;
+            }
+        }
+        unreachable!("Invalid render_x")
     }
 }
 
@@ -381,7 +401,9 @@ impl Output {
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
             editor_rows: EditorRows::new(),
-            status_message: StatusMessage::new("HELP: Ctrl-S = Save | Ctrl-Q = Quit ".into()),
+            status_message: StatusMessage::new(
+                "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
+            ), //modify
             dirty: 0,
         }
     }
@@ -389,6 +411,22 @@ impl Output {
     fn clear_screen() -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))?;
         execute!(stdout(), cursor::MoveTo(0, 0))
+    }
+
+    /* modify */
+    fn find(&mut self) -> io::Result<()> {
+        if let Some(keyword) = prompt!(self, "Search: {} (ESC to cancel)") {
+            for i in 0..self.editor_rows.number_of_rows() {
+                let row = self.editor_rows.get_editor_row(i);
+                if let Some(index) = row.render.find(&keyword) {
+                    self.cursor_controller.cursor_y = i;
+                    self.cursor_controller.cursor_x = row.get_row_content_x(index);
+                    self.cursor_controller.row_offset = self.editor_rows.number_of_rows();
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn draw_message_bar(&mut self) {
@@ -655,6 +693,13 @@ impl Editor {
                     self.output.dirty = 0
                 })?;
             }
+            /* add the following*/
+            KeyEvent {
+                code: KeyCode::Char('f'),
+                modifiers: KeyModifiers::CONTROL,
+            } => {
+                self.output.find()?;
+            }
             KeyEvent {
                 code: key @ (KeyCode::Backspace | KeyCode::Delete),
                 modifiers: KeyModifiers::NONE,
@@ -683,7 +728,16 @@ impl Editor {
     }
 
     fn run(&mut self) -> crossterm::Result<bool> {
+        let y = Instant::now();
         self.output.refresh_screen()?;
+        let y = y.elapsed();
+        OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open("render.txt")
+            .unwrap()
+            .write_all(format!("{:?}\n", y).as_bytes())
+            .unwrap();
         self.process_keypress()
     }
 }
