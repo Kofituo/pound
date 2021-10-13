@@ -2,7 +2,9 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
@@ -391,11 +393,16 @@ impl io::Write for EditorContents {
     }
 }
 
+enum SearchDirection {
+    Forward,
+    Backward,
+}
+
 struct SearchIndex {
     x_index: usize,
     y_index: usize,
-    x_direction: i8,
-    y_direction: i8,
+    x_direction: SearchDirection,
+    y_direction: SearchDirection,
 }
 
 impl SearchIndex {
@@ -403,16 +410,16 @@ impl SearchIndex {
         Self {
             x_index: 0,
             y_index: 0,
-            x_direction: 1,
-            y_direction: 1,
+            x_direction: SearchDirection::Forward,
+            y_direction: SearchDirection::Forward,
         }
     }
 
     fn reset(&mut self) {
         self.y_index = 0;
         self.x_index = 0;
-        self.y_direction = 1;
-        self.x_direction = 1;
+        self.y_direction = SearchDirection::Forward;
+        self.x_direction = SearchDirection::Forward;
     }
 }
 
@@ -455,10 +462,32 @@ impl Output {
                 output.search_index.reset();
             }
             _ => {
-                for i in 0..output.editor_rows.number_of_rows() {
+                let mut start = 0;
+                let mut end = output.editor_rows.number_of_rows();
+                match key_code {
+                    KeyCode::Up => {
+                        output.search_index.y_direction = SearchDirection::Backward;
+                        output.search_index.y_index = output.search_index.y_index.saturating_sub(1);
+                    }
+                    KeyCode::Down => {
+                        output.search_index.y_direction = SearchDirection::Forward;
+                        output.search_index.y_index += 1;
+                    }
+                    _ => {}
+                }
+                match output.search_index.y_direction {
+                    SearchDirection::Forward => {
+                        start = output.search_index.y_index;
+                    }
+                    SearchDirection::Backward => {
+                        end = output.search_index.y_index;
+                    }
+                }
+                for i in start..end {
                     let row = output.editor_rows.get_editor_row(i);
                     if let Some(index) = row.render.find(&keyword) {
                         output.cursor_controller.cursor_y = i;
+                        output.search_index.y_index = i;
                         output.cursor_controller.cursor_x = row.get_row_content_x(index);
                         output.cursor_controller.row_offset = output.editor_rows.number_of_rows();
                         break;
@@ -744,7 +773,6 @@ impl Editor {
                     self.output.dirty = 0
                 })?;
             }
-            /* add the following*/
             KeyEvent {
                 code: KeyCode::Char('f'),
                 modifiers: KeyModifiers::CONTROL,
