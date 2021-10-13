@@ -545,7 +545,7 @@ impl Output {
         if prompt!(
             self,
             "Search: {} (Use ESC / Arrows / Enter)", // modify
-            callback = Output::find_callbackk
+            callback = Output::find_callback
         )
         .is_none()
         {
