@@ -2,9 +2,7 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
-use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
-use std::ops::Range;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
@@ -24,6 +22,7 @@ impl Drop for CleanUp {
 
 #[macro_export]
 macro_rules! prompt {
+    /* modify */
     ($output:expr,$args:tt) => {
         prompt!($output, $args, callback = |&_, _, _| {})
     };
@@ -31,16 +30,17 @@ macro_rules! prompt {
         let output: &mut Output = $output;
         let mut input = String::with_capacity(32);
         loop {
-            output.status_message.set_message(format!($args, input));
+            output.status_message.set_message(format!($args, input)); // modify
             output.refresh_screen()?;
-            match Reader.read_key()? {
+            let key_event = Reader.read_key()?;
+            match key_event {
                 KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: KeyModifiers::NONE,
                 } => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
-                        $callback(output, &input, KeyCode::Enter);
+                        $callback(output, &input, KeyCode::Enter); // add line
                         break;
                     }
                 }
@@ -49,7 +49,7 @@ macro_rules! prompt {
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
-                    $callback(output, &input, KeyCode::Esc);
+                    $callback(output, &input, KeyCode::Esc); // add line
                     break;
                 }
                 KeyEvent {
@@ -67,10 +67,10 @@ macro_rules! prompt {
                         KeyCode::Char(ch) => ch,
                         _ => unreachable!(),
                     });
-                    $callback(output, &input, code)
                 }
-                KeyEvent { code, .. } => $callback(output, &input, code), // add line
+                _ => {}
             }
+            $callback(output, &input, key_event.code); // add line
         }
         if input.is_empty() {
             None
@@ -146,7 +146,7 @@ impl Row {
                 return cursor_x;
             }
         }
-        unreachable!("Invalid render_x")
+        0
     }
 }
 
@@ -401,8 +401,8 @@ enum SearchDirection {
 struct SearchIndex {
     x_index: usize,
     y_index: usize,
-    x_direction: SearchDirection,
-    y_direction: SearchDirection,
+    x_direction: Option<SearchDirection>,
+    y_direction: Option<SearchDirection>,
 }
 
 impl SearchIndex {
@@ -410,16 +410,16 @@ impl SearchIndex {
         Self {
             x_index: 0,
             y_index: 0,
-            x_direction: SearchDirection::Forward,
-            y_direction: SearchDirection::Forward,
+            x_direction: None,
+            y_direction: None,
         }
     }
 
     fn reset(&mut self) {
         self.y_index = 0;
         self.x_index = 0;
-        self.y_direction = SearchDirection::Forward;
-        self.x_direction = SearchDirection::Forward;
+        self.y_direction = None;
+        self.x_direction = None;
     }
 }
 
@@ -462,32 +462,75 @@ impl Output {
                 output.search_index.reset();
             }
             _ => {
-                let mut start = 0;
-                let mut end = output.editor_rows.number_of_rows();
+                output.search_index.y_direction = None;
+                output.search_index.x_direction = None;
                 match key_code {
-                    KeyCode::Up => {
-                        output.search_index.y_direction = SearchDirection::Backward;
-                        output.search_index.y_index = output.search_index.y_index.saturating_sub(1);
-                    }
                     KeyCode::Down => {
-                        output.search_index.y_direction = SearchDirection::Forward;
-                        output.search_index.y_index += 1;
+                        output.search_index.y_direction = SearchDirection::Forward.into()
+                    }
+                    KeyCode::Up => {
+                        output.search_index.y_direction = SearchDirection::Backward.into()
+                    }
+                    KeyCode::Left => {
+                        output.search_index.x_direction = SearchDirection::Backward.into()
+                    }
+                    KeyCode::Right => {
+                        output.search_index.x_direction = SearchDirection::Forward.into()
                     }
                     _ => {}
                 }
-                match output.search_index.y_direction {
-                    SearchDirection::Forward => {
-                        start = output.search_index.y_index;
+                for i in 0..output.editor_rows.number_of_rows() {
+                    let row_index = match output.search_index.y_direction.as_ref() {
+                        None => {
+                            /* modify */
+                            if output.search_index.x_direction.is_none() {
+                                output.search_index.y_index = 0;
+                                i
+                            } else {
+                                output.search_index.y_index
+                            }
+                        }
+                        Some(dir) => {
+                            if matches!(dir, SearchDirection::Forward) {
+                                output.search_index.y_index + i + 1
+                            } else {
+                                let res = output.search_index.y_index.saturating_sub(i);
+                                if res == 0 {
+                                    break;
+                                }
+                                res - 1
+                            }
+                        }
+                    };
+                    if row_index > output.editor_rows.number_of_rows() - 1 {
+                        break;
                     }
-                    SearchDirection::Backward => {
-                        end = output.search_index.y_index;
-                    }
-                }
-                for i in start..end {
-                    let row = output.editor_rows.get_editor_row(i);
-                    if let Some(index) = row.render.find(&keyword) {
-                        output.cursor_controller.cursor_y = i;
-                        output.search_index.y_index = i;
+                    let row = output.editor_rows.get_editor_row(row_index);
+                    /* add the following */
+                    let index = match output.search_index.x_direction.as_ref() {
+                        None => row.render.find(&keyword),
+
+                        Some(dir) => {
+                            let index = if matches!(dir, SearchDirection::Forward) {
+                                let start =
+                                    cmp::min(row.render.len(), output.search_index.x_index + 1);
+                                row.render[start..]
+                                    .find(&keyword)
+                                    .map(|index| index + start)
+                            } else {
+                                row.render[..output.search_index.x_index].rfind(&keyword)
+                            };
+                            if index.is_none() {
+                                break;
+                            }
+                            index
+                        }
+                    };
+                    // modify
+                    if let Some(index) = index {
+                        output.cursor_controller.cursor_y = row_index;
+                        output.search_index.y_index = row_index;
+                        output.search_index.x_index = index; // add line
                         output.cursor_controller.cursor_x = row.get_row_content_x(index);
                         output.cursor_controller.row_offset = output.editor_rows.number_of_rows();
                         break;
@@ -499,12 +542,14 @@ impl Output {
 
     fn find(&mut self) -> io::Result<()> {
         let cursor_controller = self.cursor_controller;
-        if let None = prompt!(
+        if prompt!(
             self,
-            "Search: {} (ESC to cancel)",
-            callback = Output::find_callback
-        ) {
-            self.cursor_controller = cursor_controller;
+            "Search: {} (Use ESC / Arrows / Enter)", // modify
+            callback = Output::find_callbackk
+        )
+        .is_none()
+        {
+            self.cursor_controller = cursor_controller
         }
         Ok(())
     }
@@ -758,7 +803,7 @@ impl Editor {
                 if matches!(self.output.editor_rows.filename, None) {
                     let prompt = prompt!(&mut self.output, "Save as : {} (ESC to cancel)")
                         .map(|it| it.into());
-                    if let None = prompt {
+                    if prompt.is_none() {
                         self.output
                             .status_message
                             .set_message("Save Aborted".into());
