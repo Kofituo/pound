@@ -391,6 +391,31 @@ impl io::Write for EditorContents {
     }
 }
 
+struct SearchIndex {
+    x_index: usize,
+    y_index: usize,
+    x_direction: i8,
+    y_direction: i8,
+}
+
+impl SearchIndex {
+    fn new() -> Self {
+        Self {
+            x_index: 0,
+            y_index: 0,
+            x_direction: 1,
+            y_direction: 1,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.y_index = 0;
+        self.x_index = 0;
+        self.y_direction = 1;
+        self.x_direction = 1;
+    }
+}
+
 struct Output {
     win_size: (usize, usize),
     editor_contents: EditorContents,
@@ -398,6 +423,7 @@ struct Output {
     editor_rows: EditorRows,
     status_message: StatusMessage,
     dirty: u64,
+    search_index: SearchIndex, // add line
 }
 
 impl Output {
@@ -412,8 +438,9 @@ impl Output {
             editor_rows: EditorRows::new(),
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
-            ), //modify
+            ),
             dirty: 0,
+            search_index: SearchIndex::new(), // add line
         }
     }
 
@@ -424,7 +451,9 @@ impl Output {
 
     fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
         match key_code {
-            KeyCode::Esc | KeyCode::Enter => {}
+            KeyCode::Esc | KeyCode::Enter => {
+                output.search_index.reset();
+            }
             _ => {
                 for i in 0..output.editor_rows.number_of_rows() {
                     let row = output.editor_rows.get_editor_row(i);
