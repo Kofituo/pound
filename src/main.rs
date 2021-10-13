@@ -484,11 +484,9 @@ impl Output {
                         None => {
                             /* modify */
                             if output.search_index.x_direction.is_none() {
-                                output.search_index.y_index = 0;
-                                i
-                            } else {
-                                output.search_index.y_index
+                                output.search_index.y_index = i;
                             }
+                            output.search_index.y_index
                         }
                         Some(dir) => {
                             if matches!(dir, SearchDirection::Forward) {
@@ -509,7 +507,6 @@ impl Output {
                     /* add the following */
                     let index = match output.search_index.x_direction.as_ref() {
                         None => row.render.find(&keyword),
-
                         Some(dir) => {
                             let index = if matches!(dir, SearchDirection::Forward) {
                                 let start =
