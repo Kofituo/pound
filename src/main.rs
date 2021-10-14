@@ -2,6 +2,7 @@ use crossterm::event::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -22,7 +23,6 @@ impl Drop for CleanUp {
 
 #[macro_export]
 macro_rules! prompt {
-    /* modify */
     ($output:expr,$args:tt) => {
         prompt!($output, $args, callback = |&_, _, _| {})
     };
@@ -30,7 +30,7 @@ macro_rules! prompt {
         let output: &mut Output = $output;
         let mut input = String::with_capacity(32);
         loop {
-            output.status_message.set_message(format!($args, input)); // modify
+            output.status_message.set_message(format!($args, input));
             output.refresh_screen()?;
             let key_event = Reader.read_key()?;
             match key_event {
@@ -40,7 +40,7 @@ macro_rules! prompt {
                 } => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
-                        $callback(output, &input, KeyCode::Enter); // add line
+                        $callback(output, &input, KeyCode::Enter);
                         break;
                     }
                 }
@@ -49,7 +49,7 @@ macro_rules! prompt {
                 } => {
                     output.status_message.set_message(String::new());
                     input.clear();
-                    $callback(output, &input, KeyCode::Esc); // add line
+                    $callback(output, &input, KeyCode::Esc);
                     break;
                 }
                 KeyEvent {
@@ -70,7 +70,7 @@ macro_rules! prompt {
                 }
                 _ => {}
             }
-            $callback(output, &input, key_event.code); // add line
+            $callback(output, &input, key_event.code);
         }
         if input.is_empty() {
             None
@@ -403,6 +403,7 @@ struct SearchIndex {
     y_index: usize,
     x_direction: Option<SearchDirection>,
     y_direction: Option<SearchDirection>,
+    hit: Option<SearchDirection>,
 }
 
 impl SearchIndex {
@@ -412,6 +413,7 @@ impl SearchIndex {
             y_index: 0,
             x_direction: None,
             y_direction: None,
+            hit: None,
         }
     }
 
@@ -420,6 +422,7 @@ impl SearchIndex {
         self.x_index = 0;
         self.y_direction = None;
         self.x_direction = None;
+        self.hit = None;
     }
 }
 
@@ -430,7 +433,7 @@ struct Output {
     editor_rows: EditorRows,
     status_message: StatusMessage,
     dirty: u64,
-    search_index: SearchIndex, // add line
+    search_index: SearchIndex,
 }
 
 impl Output {
@@ -457,6 +460,7 @@ impl Output {
     }
 
     fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
+        let s = Instant::now();
         match key_code {
             KeyCode::Esc | KeyCode::Enter => {
                 output.search_index.reset();
@@ -479,10 +483,10 @@ impl Output {
                     }
                     _ => {}
                 }
+                let start_y = output.cursor_controller.cursor_y;
                 for i in 0..output.editor_rows.number_of_rows() {
                     let row_index = match output.search_index.y_direction.as_ref() {
                         None => {
-                            /* modify */
                             if output.search_index.x_direction.is_none() {
                                 output.search_index.y_index = i;
                             }
@@ -490,6 +494,11 @@ impl Output {
                         }
                         Some(dir) => {
                             if matches!(dir, SearchDirection::Forward) {
+                                if let Some(dir) = &output.search_index.hit {
+                                    if matches!(dir, SearchDirection::Forward) {
+                                        break;
+                                    }
+                                }
                                 output.search_index.y_index + i + 1
                             } else {
                                 let res = output.search_index.y_index.saturating_sub(i);
@@ -500,11 +509,11 @@ impl Output {
                             }
                         }
                     };
+                    output.search_index.hit = None;
                     if row_index > output.editor_rows.number_of_rows() - 1 {
                         break;
                     }
                     let row = output.editor_rows.get_editor_row(row_index);
-                    /* add the following */
                     let index = match output.search_index.x_direction.as_ref() {
                         None => row.render.find(&keyword),
                         Some(dir) => {
@@ -523,25 +532,41 @@ impl Output {
                             index
                         }
                     };
-                    // modify
                     if let Some(index) = index {
                         output.cursor_controller.cursor_y = row_index;
                         output.search_index.y_index = row_index;
-                        output.search_index.x_index = index; // add line
+                        output.search_index.x_index = index;
                         output.cursor_controller.cursor_x = row.get_row_content_x(index);
                         output.cursor_controller.row_offset = output.editor_rows.number_of_rows();
                         break;
                     }
                 }
+                if let Some(dir) = output.search_index.y_direction.as_ref() {
+                    match dir {
+                        SearchDirection::Forward => {
+                            if start_y == output.cursor_controller.cursor_y {
+                                output.search_index.hit = SearchDirection::Forward.into()
+                            }
+                        }
+                        SearchDirection::Backward => {}
+                    }
+                }
             }
         }
+        let s = s.elapsed();
+        OpenOptions::new()
+            .append(true)
+            .open("time.txt")
+            .unwrap()
+            .write_all(format!("{:?}\n", s).as_bytes())
+            .unwrap();
     }
 
     fn find(&mut self) -> io::Result<()> {
         let cursor_controller = self.cursor_controller;
         if prompt!(
             self,
-            "Search: {} (Use ESC / Arrows / Enter)", // modify
+            "Search: {} (Use ESC / Arrows / Enter)",
             callback = Output::find_callback
         )
         .is_none()

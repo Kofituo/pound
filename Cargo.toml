@@ -9,3 +9,6 @@ debug = true
 
 [dependencies]
 crossterm = "0.21.0"
+
+[profile.release]
+debug = true
