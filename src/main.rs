@@ -1,8 +1,8 @@
 use crossterm::event::*;
+use crossterm::style::*; // add import
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
-use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -403,7 +403,6 @@ struct SearchIndex {
     y_index: usize,
     x_direction: Option<SearchDirection>,
     y_direction: Option<SearchDirection>,
-    hit: Option<SearchDirection>,
 }
 
 impl SearchIndex {
@@ -413,7 +412,6 @@ impl SearchIndex {
             y_index: 0,
             x_direction: None,
             y_direction: None,
-            hit: None,
         }
     }
 
@@ -422,7 +420,6 @@ impl SearchIndex {
         self.x_index = 0;
         self.y_direction = None;
         self.x_direction = None;
-        self.hit = None;
     }
 }
 
@@ -450,7 +447,7 @@ impl Output {
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
             dirty: 0,
-            search_index: SearchIndex::new(), // add line
+            search_index: SearchIndex::new(),
         }
     }
 
@@ -460,7 +457,6 @@ impl Output {
     }
 
     fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
-        let s = Instant::now();
         match key_code {
             KeyCode::Esc | KeyCode::Enter => {
                 output.search_index.reset();
@@ -483,7 +479,6 @@ impl Output {
                     }
                     _ => {}
                 }
-                let start_y = output.cursor_controller.cursor_y;
                 for i in 0..output.editor_rows.number_of_rows() {
                     let row_index = match output.search_index.y_direction.as_ref() {
                         None => {
@@ -494,11 +489,6 @@ impl Output {
                         }
                         Some(dir) => {
                             if matches!(dir, SearchDirection::Forward) {
-                                if let Some(dir) = &output.search_index.hit {
-                                    if matches!(dir, SearchDirection::Forward) {
-                                        break;
-                                    }
-                                }
                                 output.search_index.y_index + i + 1
                             } else {
                                 let res = output.search_index.y_index.saturating_sub(i);
@@ -509,7 +499,6 @@ impl Output {
                             }
                         }
                     };
-                    output.search_index.hit = None;
                     if row_index > output.editor_rows.number_of_rows() - 1 {
                         break;
                     }
@@ -541,25 +530,8 @@ impl Output {
                         break;
                     }
                 }
-                if let Some(dir) = output.search_index.y_direction.as_ref() {
-                    match dir {
-                        SearchDirection::Forward => {
-                            if start_y == output.cursor_controller.cursor_y {
-                                output.search_index.hit = SearchDirection::Forward.into()
-                            }
-                        }
-                        SearchDirection::Backward => {}
-                    }
-                }
             }
         }
-        let s = s.elapsed();
-        OpenOptions::new()
-            .append(true)
-            .open("time.txt")
-            .unwrap()
-            .write_all(format!("{:?}\n", s).as_bytes())
-            .unwrap();
     }
 
     fn find(&mut self) -> io::Result<()> {
@@ -707,7 +679,17 @@ impl Output {
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
-                self.editor_contents.push_str(&row[start..start + len])
+                /* modify */
+                row[start..start + len].chars().for_each(|c| {
+                    if c.is_digit(10) {
+                        let _ = queue!(self.editor_contents, SetForegroundColor(Color::Cyan));
+                        self.editor_contents.push(c);
+                        let _ = queue!(self.editor_contents, ResetColor);
+                    } else {
+                        self.editor_contents.push(c);
+                    }
+                });
+                //self.editor_contents.push_str(&row[start..start + len])
             }
             queue!(
                 self.editor_contents,
