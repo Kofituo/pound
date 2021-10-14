@@ -1,7 +1,7 @@
 use crossterm::event::*;
-use crossterm::style::*; // add import
+use crossterm::style::*;
 use crossterm::terminal::ClearType;
-use crossterm::{cursor, event, execute, queue, style, terminal};
+use crossterm::{cursor, event, execute, queue, style, terminal, Command};
 use std::cmp::Ordering;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
@@ -79,6 +79,8 @@ macro_rules! prompt {
         }
     }};
 }
+
+trait SyntaxHighlight {}
 
 struct StatusMessage {
     message: Option<String>,
