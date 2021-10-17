@@ -182,10 +182,17 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
-                    /* add the following */
                     if let Some(val) = in_string {
                         add! {
                             if val == '"' { HighlightType::String } else { HighlightType::CharLiteral }
+                        }
+                        /* add the following */
+                        if c == '\\' && i + 1 < render.len() {
+                            add! {
+                                if val == '"' { HighlightType::String } else { HighlightType::CharLiteral }
+                            }
+                            i += 2;
+                            continue
                         }
                         if val == c {
                             in_string = None;
@@ -201,7 +208,6 @@ macro_rules! syntax_struct {
                         i += 1;
                         continue;
                     }
-                    /* end */
                     if (c.is_digit(10)
                         && (previous_separator
                             || matches!(previous_highlight, HighlightType::Number)))
