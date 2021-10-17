@@ -85,6 +85,8 @@ enum HighlightType {
     Normal,
     Number,
     SearchMatch,
+    String,      // add line
+    CharLiteral, // add line
 }
 
 trait SyntaxHighlight {
@@ -156,6 +158,8 @@ macro_rules! syntax_struct {
                     HighlightType::Normal => Color::Reset,
                     HighlightType::Number => Color::Cyan,
                     HighlightType::SearchMatch => Color::Blue,
+                    HighlightType::String => Color::Green,
+                    HighlightType::CharLiteral => Color::DarkGreen,
                 }
             }
 
@@ -170,6 +174,7 @@ macro_rules! syntax_struct {
                 let render = current_row.render.as_bytes();
                 let mut i = 0;
                 let mut previous_separator = true;
+                let mut in_string: Option<char> = None;
                 while i < render.len() {
                     let c = render[i] as char;
                     let previous_highlight = if i > 0 {
@@ -177,6 +182,26 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
+                    /* add the following */
+                    if let Some(val) = in_string {
+                        add! {
+                            if val == '"' { HighlightType::String } else { HighlightType::CharLiteral }
+                        }
+                        if val == c {
+                            in_string = None;
+                        }
+                        i += 1;
+                        previous_separator = true;
+                        continue;
+                    } else if c == '"' || c == '\'' {
+                        in_string = Some(c);
+                        add! {
+                            if c == '"' { HighlightType::String } else { HighlightType::CharLiteral }
+                        }
+                        i += 1;
+                        continue;
+                    }
+                    /* end */
                     if (c.is_digit(10)
                         && (previous_separator
                             || matches!(previous_highlight, HighlightType::Number)))
@@ -856,7 +881,7 @@ impl Output {
                     .map(|syntax_highlight| {
                         syntax_highlight.color_row(
                             &render[start..start + len],
-                            &row.highlight,
+                            &row.highlight[start..start + len],
                             &mut self.editor_contents,
                         )
                     })
