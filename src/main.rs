@@ -80,7 +80,7 @@ macro_rules! prompt {
     }};
 }
 
-#[derive(Copy, Clone)] // add derive
+#[derive(Copy, Clone)]
 enum HighlightType {
     Normal,
     Number,
@@ -91,11 +91,23 @@ trait SyntaxHighlight {
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
-        render.chars().enumerate().for_each(|(i, c)| {
-            let _ = queue!(out, SetForegroundColor(self.syntax_color(&highlight[i])));
+        let mut current_color = self.syntax_color(&HighlightType::Normal);
+        render.char_indices().for_each(|(i, c)| {
+            let color = self.syntax_color(&highlight[i]);
+            if current_color != color {
+                current_color = color;
+                let _ = queue!(out, SetForegroundColor(color));
+            }
             out.push(c);
-            let _ = queue!(out, ResetColor);
         });
+        let _ = queue!(out, SetForegroundColor(Color::Reset));
+    }
+    fn is_separator(&self, c: char) -> bool {
+        c.is_whitespace()
+            || [
+                ',', '.', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"', '\'', ';',
+            ]
+            .contains(&c)
     }
 }
 
@@ -113,9 +125,9 @@ macro_rules! syntax_struct {
         impl SyntaxHighlight for $Name {
             fn syntax_color(&self, highlight_type: &HighlightType) -> Color {
                 match highlight_type {
-                    HighlightType::Normal => Color::White,
+                    HighlightType::Normal => Color::Reset,
                     HighlightType::Number => Color::Cyan,
-                    HighlightType::SearchMatch => Color::Blue, // add line
+                    HighlightType::SearchMatch => Color::Blue,
                 }
             }
 
@@ -127,13 +139,31 @@ macro_rules! syntax_struct {
                     };
                 }
                 current_row.highlight = Vec::with_capacity(current_row.render.len());
-                let chars = current_row.render.chars();
-                for c in chars {
-                    if c.is_digit(10) {
+                let render = current_row.render.as_bytes();
+                let mut i = 0;
+                let mut previous_separator = true;
+                while i < render.len() {
+                    let c = render[i] as char;
+                    let previous_highlight = if i > 0 {
+                        current_row.highlight[i - 1]
+                    } else {
+                        HighlightType::Normal
+                    };
+                    /* modify */
+                    if (c.is_digit(10)
+                        && (previous_separator
+                            || matches!(previous_highlight, HighlightType::Number)))
+                        || (c == '.' && matches!(previous_highlight, HighlightType::Number))
+                    {
                         add!(HighlightType::Number);
+                        i += 1;
+                        previous_separator = false;
+                        continue;
                     } else {
                         add!(HighlightType::Normal)
                     }
+                    previous_separator = self.is_separator(c);
+                    i += 1;
                 }
                 assert_eq!(current_row.render.len(), current_row.highlight.len())
             }
