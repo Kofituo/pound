@@ -80,17 +80,16 @@ macro_rules! prompt {
     }};
 }
 
-/* add enum */
-#[derive(Debug)]
+#[derive(Copy, Clone)] // add derive
 enum HighlightType {
     Normal,
     Number,
+    SearchMatch,
 }
 
 trait SyntaxHighlight {
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
-    /* add function */
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
         render.chars().enumerate().for_each(|(i, c)| {
             let _ = queue!(out, SetForegroundColor(self.syntax_color(&highlight[i])));
@@ -116,6 +115,7 @@ macro_rules! syntax_struct {
                 match highlight_type {
                     HighlightType::Normal => Color::White,
                     HighlightType::Number => Color::Cyan,
+                    HighlightType::SearchMatch => Color::Blue, // add line
                 }
             }
 
@@ -175,7 +175,7 @@ impl StatusMessage {
 struct Row {
     row_content: String,
     render: String,
-    highlight: Vec<HighlightType>, // add field
+    highlight: Vec<HighlightType>,
 }
 
 impl Row {
@@ -183,7 +183,7 @@ impl Row {
         Self {
             row_content,
             render,
-            highlight: Vec::new(), // add line
+            highlight: Vec::new(),
         }
     }
 
@@ -467,6 +467,7 @@ struct SearchIndex {
     y_index: usize,
     x_direction: Option<SearchDirection>,
     y_direction: Option<SearchDirection>,
+    previous_highlight: Option<(usize, Vec<HighlightType>)>,
 }
 
 impl SearchIndex {
@@ -476,6 +477,7 @@ impl SearchIndex {
             y_index: 0,
             x_direction: None,
             y_direction: None,
+            previous_highlight: None,
         }
     }
 
@@ -484,6 +486,7 @@ impl SearchIndex {
         self.x_index = 0;
         self.y_direction = None;
         self.x_direction = None;
+        self.previous_highlight = None
     }
 }
 
@@ -503,18 +506,18 @@ impl Output {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
-        let syntax_highlight: Option<Box<dyn SyntaxHighlight>> = Some(Box::new(RustHighlight)); // add line
+        let syntax_highlight: Option<Box<dyn SyntaxHighlight>> = Some(Box::new(RustHighlight));
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
-            editor_rows: EditorRows::new(syntax_highlight.as_deref()), // modify
+            editor_rows: EditorRows::new(syntax_highlight.as_deref()),
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
             dirty: 0,
             search_index: SearchIndex::new(),
-            syntax_highlight, //modify
+            syntax_highlight,
         }
     }
 
@@ -524,6 +527,10 @@ impl Output {
     }
 
     fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
+        /* add the following */
+        if let Some((index, highlight)) = output.search_index.previous_highlight.take() {
+            output.editor_rows.get_editor_row_mut(index).highlight = highlight;
+        }
         match key_code {
             KeyCode::Esc | KeyCode::Enter => {
                 output.search_index.reset();
@@ -569,7 +576,7 @@ impl Output {
                     if row_index > output.editor_rows.number_of_rows() - 1 {
                         break;
                     }
-                    let row = output.editor_rows.get_editor_row(row_index);
+                    let row = output.editor_rows.get_editor_row_mut(row_index);
                     let index = match output.search_index.x_direction.as_ref() {
                         None => row.render.find(&keyword),
                         Some(dir) => {
@@ -589,6 +596,10 @@ impl Output {
                         }
                     };
                     if let Some(index) = index {
+                        output.search_index.previous_highlight =
+                            Some((row_index, row.highlight.clone()));
+                        (index..index + keyword.len())
+                            .for_each(|index| row.highlight[index] = HighlightType::SearchMatch);
                         output.cursor_controller.cursor_y = row_index;
                         output.search_index.y_index = row_index;
                         output.search_index.x_index = index;
@@ -648,7 +659,6 @@ impl Output {
                 .join_adjacent_rows(self.cursor_controller.cursor_y);
             self.cursor_controller.cursor_y -= 1;
         }
-        /* add the following */
         if let Some(it) = self.syntax_highlight.as_ref() {
             it.update_syntax(
                 self.cursor_controller.cursor_y,
@@ -673,7 +683,6 @@ impl Output {
             EditorRows::render_row(current_row);
             self.editor_rows
                 .insert_row(self.cursor_controller.cursor_y + 1, new_row_content);
-            /* add the following */
             if let Some(it) = self.syntax_highlight.as_ref() {
                 it.update_syntax(
                     self.cursor_controller.cursor_y,
@@ -699,7 +708,6 @@ impl Output {
         self.editor_rows
             .get_editor_row_mut(self.cursor_controller.cursor_y)
             .insert_char(self.cursor_controller.cursor_x, ch);
-        /* add the following*/
         if let Some(it) = self.syntax_highlight.as_ref() {
             it.update_syntax(
                 self.cursor_controller.cursor_y,
@@ -766,7 +774,6 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                /* modify */
                 let row = self.editor_rows.get_editor_row(file_row);
                 let render = &row.render;
                 let column_offset = self.cursor_controller.column_offset;
@@ -782,7 +789,6 @@ impl Output {
                         )
                     })
                     .unwrap_or_else(|| self.editor_contents.push_str(&render[start..start + len]));
-                /* end */
             }
             queue!(
                 self.editor_contents,
