@@ -85,13 +85,15 @@ enum HighlightType {
     Normal,
     Number,
     SearchMatch,
-    String,      // add line
-    CharLiteral, // add line
+    String,
+    CharLiteral,
+    Comment, // add line
 }
 
 trait SyntaxHighlight {
     fn extensions(&self) -> &[&str];
     fn file_type(&self) -> &str;
+    fn comment_start(&self) -> &str; // add method
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
@@ -118,7 +120,8 @@ trait SyntaxHighlight {
 syntax_struct! {
     struct RustHighlight {
         extensions:["rs"],
-        file_type: "rust"
+        file_type:"rust",
+        comment_start:"//" // add line
     }
 }
 
@@ -127,12 +130,14 @@ macro_rules! syntax_struct {
     (
         struct $Name:ident {
             extensions:$ext:expr,
-            file_type:$type:expr
+            file_type:$type:expr,
+            comment_start:$start:expr // add line
         }
     ) => {
         struct $Name {
             extensions: &'static [&'static str],
             file_type: &'static str,
+            comment_start:&'static str // add line
         }
 
         impl $Name {
@@ -140,11 +145,17 @@ macro_rules! syntax_struct {
                 Self {
                     extensions: &$ext,
                     file_type: $type,
+                    comment_start:$start // add line
                 }
             }
         }
 
         impl SyntaxHighlight for $Name {
+            /* add method */
+            fn comment_start(&self) -> &str {
+                self.comment_start
+            }
+
             fn extensions(&self) -> &[&str] {
                 self.extensions
             }
@@ -160,6 +171,7 @@ macro_rules! syntax_struct {
                     HighlightType::SearchMatch => Color::Blue,
                     HighlightType::String => Color::Green,
                     HighlightType::CharLiteral => Color::DarkGreen,
+                    HighlightType::Comment => Color::DarkGrey, // add line
                 }
             }
 
@@ -175,6 +187,7 @@ macro_rules! syntax_struct {
                 let mut i = 0;
                 let mut previous_separator = true;
                 let mut in_string: Option<char> = None;
+                let comment_start = self.comment_start().as_bytes(); // add line
                 while i < render.len() {
                     let c = render[i] as char;
                     let previous_highlight = if i > 0 {
@@ -182,11 +195,18 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
+                    /* add the following */
+                    if in_string.is_none() && !comment_start.is_empty() {
+                        let end = i + comment_start.len();
+                        if render[i..cmp::min(end, render.len())] == *comment_start {
+                            (i..render.len()).for_each(|_| add!(HighlightType::Comment));
+                            break;
+                        }
+                    }
                     if let Some(val) = in_string {
                         add! {
                             if val == '"' { HighlightType::String } else { HighlightType::CharLiteral }
                         }
-                        /* add the following */
                         if c == '\\' && i + 1 < render.len() {
                             add! {
                                 if val == '"' { HighlightType::String } else { HighlightType::CharLiteral }
