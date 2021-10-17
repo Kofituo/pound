@@ -88,7 +88,8 @@ enum HighlightType {
 }
 
 trait SyntaxHighlight {
-    fn extensions(&self) -> &[&str]; // add method
+    fn extensions(&self) -> &[&str];
+    fn file_type(&self) -> &str;
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
@@ -114,7 +115,8 @@ trait SyntaxHighlight {
 
 syntax_struct! {
     struct RustHighlight {
-        extensions:["rs"]
+        extensions:["rs"],
+        file_type: "rust"
     }
 }
 
@@ -122,16 +124,21 @@ syntax_struct! {
 macro_rules! syntax_struct {
     (
         struct $Name:ident {
-            extensions:$ext:expr
+            extensions:$ext:expr,
+            file_type:$type:expr
         }
     ) => {
         struct $Name {
             extensions: &'static [&'static str],
+            file_type: &'static str,
         }
 
         impl $Name {
             fn new() -> Self {
-                Self { extensions: &$ext }
+                Self {
+                    extensions: &$ext,
+                    file_type: $type,
+                }
             }
         }
 
@@ -139,6 +146,11 @@ macro_rules! syntax_struct {
             fn extensions(&self) -> &[&str] {
                 self.extensions
             }
+
+            fn file_type(&self) -> &str {
+                self.file_type
+            }
+
             fn syntax_color(&self, highlight_type: &HighlightType) -> Color {
                 match highlight_type {
                     HighlightType::Normal => Color::Reset,
@@ -278,11 +290,9 @@ impl EditorRows {
         //modify
         let file_contents = fs::read_to_string(&file).expect("Unable to read file");
         let mut row_contents = Vec::new();
-        /* add the following */
         file.extension()
             .and_then(|ext| ext.to_str())
             .map(|ext| Output::select_syntax(ext).map(|syntax| syntax_highlight.insert(syntax)));
-        /* end */
         file_contents.lines().enumerate().for_each(|(i, line)| {
             let mut row = Row::new(line.into(), String::new());
             Self::render_row(&mut row);
@@ -585,7 +595,6 @@ impl Output {
     }
 
     fn find_callback(output: &mut Output, keyword: &str, key_code: KeyCode) {
-        /* add the following */
         if let Some((index, highlight)) = output.search_index.previous_highlight.take() {
             output.editor_rows.get_editor_row_mut(index).highlight = highlight;
         }
@@ -791,8 +800,13 @@ impl Output {
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
+        /* modify the following */
         let line_info = format!(
-            "{}/{}",
+            "{} | {}/{}",
+            self.syntax_highlight
+                .as_ref()
+                .map(|highlight| highlight.file_type())
+                .unwrap_or("no ft"),
             self.cursor_controller.cursor_y + 1,
             self.editor_rows.number_of_rows()
         );
@@ -970,6 +984,21 @@ impl Editor {
                             .set_message("Save Aborted".into());
                         return Ok(true);
                     }
+                    /* add the following */
+                    prompt
+                        .as_ref()
+                        .and_then(|path: &PathBuf| path.extension())
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| {
+                            Output::select_syntax(ext).map(|syntax| {
+                                let highlight = self.output.syntax_highlight.insert(syntax);
+                                for i in 0..self.output.editor_rows.number_of_rows() {
+                                    highlight
+                                        .update_syntax(i, &mut self.output.editor_rows.row_contents)
+                                }
+                            })
+                        });
+
                     self.output.editor_rows.filename = prompt
                 }
                 self.output.editor_rows.save().map(|len| {
