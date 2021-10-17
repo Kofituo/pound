@@ -1,7 +1,7 @@
 use crossterm::event::*;
 use crossterm::style::*;
 use crossterm::terminal::ClearType;
-use crossterm::{cursor, event, execute, queue, style, terminal, Command};
+use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
 use std::io::{stdout, ErrorKind, Write};
 use std::path::PathBuf;
@@ -80,7 +80,66 @@ macro_rules! prompt {
     }};
 }
 
-trait SyntaxHighlight {}
+/* add enum */
+#[derive(Debug)]
+enum HighlightType {
+    Normal,
+    Number,
+}
+
+trait SyntaxHighlight {
+    fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
+    fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
+    /* add function */
+    fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
+        render.chars().enumerate().for_each(|(i, c)| {
+            let _ = queue!(out, SetForegroundColor(self.syntax_color(&highlight[i])));
+            out.push(c);
+            let _ = queue!(out, ResetColor);
+        });
+    }
+}
+
+syntax_struct! {
+    struct RustHighlight;
+}
+
+#[macro_export]
+macro_rules! syntax_struct {
+    (
+        struct $Name:ident;
+    ) => {
+        struct $Name;
+
+        impl SyntaxHighlight for $Name {
+            fn syntax_color(&self, highlight_type: &HighlightType) -> Color {
+                match highlight_type {
+                    HighlightType::Normal => Color::White,
+                    HighlightType::Number => Color::Cyan,
+                }
+            }
+
+            fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>) {
+                let current_row = &mut editor_rows[at];
+                macro_rules! add {
+                    ($h:expr) => {
+                        current_row.highlight.push($h)
+                    };
+                }
+                current_row.highlight = Vec::with_capacity(current_row.render.len());
+                let chars = current_row.render.chars();
+                for c in chars {
+                    if c.is_digit(10) {
+                        add!(HighlightType::Number);
+                    } else {
+                        add!(HighlightType::Normal)
+                    }
+                }
+                assert_eq!(current_row.render.len(), current_row.highlight.len())
+            }
+        }
+    };
+}
 
 struct StatusMessage {
     message: Option<String>,
@@ -113,10 +172,10 @@ impl StatusMessage {
     }
 }
 
-#[derive(Default)]
 struct Row {
     row_content: String,
     render: String,
+    highlight: Vec<HighlightType>, // add field
 }
 
 impl Row {
@@ -124,6 +183,7 @@ impl Row {
         Self {
             row_content,
             render,
+            highlight: Vec::new(), // add line
         }
     }
 
@@ -158,28 +218,30 @@ struct EditorRows {
 }
 
 impl EditorRows {
-    fn new() -> Self {
+    fn new(syntax_highlight: Option<&dyn SyntaxHighlight>) -> Self {
         match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
                 filename: None,
             },
-            Some(file) => Self::from_file(file.into()),
+            Some(file) => Self::from_file(file.into(), syntax_highlight),
         }
     }
 
-    fn from_file(file: PathBuf) -> Self {
+    fn from_file(file: PathBuf, syntax_highlight: Option<&dyn SyntaxHighlight>) -> Self {
         let file_contents = fs::read_to_string(&file).expect("Unable to read file");
+        let mut row_contents = Vec::new();
+        file_contents.lines().enumerate().for_each(|(i, line)| {
+            let mut row = Row::new(line.into(), String::new());
+            Self::render_row(&mut row);
+            row_contents.push(row);
+            if let Some(it) = syntax_highlight {
+                it.update_syntax(i, &mut row_contents)
+            }
+        });
         Self {
             filename: Some(file),
-            row_contents: file_contents
-                .lines()
-                .map(|it| {
-                    let mut row = Row::new(it.into(), String::new());
-                    Self::render_row(&mut row);
-                    row
-                })
-                .collect(),
+            row_contents,
         }
     }
 
@@ -433,6 +495,7 @@ struct Output {
     status_message: StatusMessage,
     dirty: u64,
     search_index: SearchIndex,
+    syntax_highlight: Option<Box<dyn SyntaxHighlight>>,
 }
 
 impl Output {
@@ -440,16 +503,18 @@ impl Output {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
+        let syntax_highlight: Option<Box<dyn SyntaxHighlight>> = Some(Box::new(RustHighlight)); // add line
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
-            editor_rows: EditorRows::new(),
+            editor_rows: EditorRows::new(syntax_highlight.as_deref()), // modify
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
             dirty: 0,
             search_index: SearchIndex::new(),
+            syntax_highlight, //modify
         }
     }
 
@@ -569,11 +634,10 @@ impl Output {
         if self.cursor_controller.cursor_y == 0 && self.cursor_controller.cursor_x == 0 {
             return;
         }
-        let row = self
-            .editor_rows
-            .get_editor_row_mut(self.cursor_controller.cursor_y);
         if self.cursor_controller.cursor_x > 0 {
-            row.delete_char(self.cursor_controller.cursor_x - 1);
+            self.editor_rows
+                .get_editor_row_mut(self.cursor_controller.cursor_y)
+                .delete_char(self.cursor_controller.cursor_x - 1);
             self.cursor_controller.cursor_x -= 1;
         } else {
             let previous_row_content = self
@@ -583,6 +647,13 @@ impl Output {
             self.editor_rows
                 .join_adjacent_rows(self.cursor_controller.cursor_y);
             self.cursor_controller.cursor_y -= 1;
+        }
+        /* add the following */
+        if let Some(it) = self.syntax_highlight.as_ref() {
+            it.update_syntax(
+                self.cursor_controller.cursor_y,
+                &mut self.editor_rows.row_contents,
+            );
         }
         self.dirty += 1;
     }
@@ -602,6 +673,17 @@ impl Output {
             EditorRows::render_row(current_row);
             self.editor_rows
                 .insert_row(self.cursor_controller.cursor_y + 1, new_row_content);
+            /* add the following */
+            if let Some(it) = self.syntax_highlight.as_ref() {
+                it.update_syntax(
+                    self.cursor_controller.cursor_y,
+                    &mut self.editor_rows.row_contents,
+                );
+                it.update_syntax(
+                    self.cursor_controller.cursor_y + 1,
+                    &mut self.editor_rows.row_contents,
+                )
+            }
         }
         self.cursor_controller.cursor_x = 0;
         self.cursor_controller.cursor_y += 1;
@@ -617,6 +699,13 @@ impl Output {
         self.editor_rows
             .get_editor_row_mut(self.cursor_controller.cursor_y)
             .insert_char(self.cursor_controller.cursor_x, ch);
+        /* add the following*/
+        if let Some(it) = self.syntax_highlight.as_ref() {
+            it.update_syntax(
+                self.cursor_controller.cursor_y,
+                &mut self.editor_rows.row_contents,
+            )
+        }
         self.cursor_controller.cursor_x += 1;
         self.dirty += 1;
     }
@@ -677,21 +766,23 @@ impl Output {
                     self.editor_contents.push('~');
                 }
             } else {
-                let row = self.editor_rows.get_render(file_row);
-                let column_offset = self.cursor_controller.column_offset;
-                let len = cmp::min(row.len().saturating_sub(column_offset), screen_columns);
-                let start = if len == 0 { 0 } else { column_offset };
                 /* modify */
-                row[start..start + len].chars().for_each(|c| {
-                    if c.is_digit(10) {
-                        let _ = queue!(self.editor_contents, SetForegroundColor(Color::Cyan));
-                        self.editor_contents.push(c);
-                        let _ = queue!(self.editor_contents, ResetColor);
-                    } else {
-                        self.editor_contents.push(c);
-                    }
-                });
-                //self.editor_contents.push_str(&row[start..start + len])
+                let row = self.editor_rows.get_editor_row(file_row);
+                let render = &row.render;
+                let column_offset = self.cursor_controller.column_offset;
+                let len = cmp::min(render.len().saturating_sub(column_offset), screen_columns);
+                let start = if len == 0 { 0 } else { column_offset };
+                self.syntax_highlight
+                    .as_ref()
+                    .map(|syntax_highlight| {
+                        syntax_highlight.color_row(
+                            &render[start..start + len],
+                            &row.highlight,
+                            &mut self.editor_contents,
+                        )
+                    })
+                    .unwrap_or_else(|| self.editor_contents.push_str(&render[start..start + len]));
+                /* end */
             }
             queue!(
                 self.editor_contents,
