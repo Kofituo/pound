@@ -88,6 +88,7 @@ enum HighlightType {
 }
 
 trait SyntaxHighlight {
+    fn extensions(&self) -> &[&str]; // add method
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
@@ -112,17 +113,32 @@ trait SyntaxHighlight {
 }
 
 syntax_struct! {
-    struct RustHighlight;
+    struct RustHighlight {
+        extensions:["rs"]
+    }
 }
 
 #[macro_export]
 macro_rules! syntax_struct {
     (
-        struct $Name:ident;
+        struct $Name:ident {
+            extensions:$ext:expr
+        }
     ) => {
-        struct $Name;
+        struct $Name {
+            extensions: &'static [&'static str],
+        }
+
+        impl $Name {
+            fn new() -> Self {
+                Self { extensions: &$ext }
+            }
+        }
 
         impl SyntaxHighlight for $Name {
+            fn extensions(&self) -> &[&str] {
+                self.extensions
+            }
             fn syntax_color(&self, highlight_type: &HighlightType) -> Color {
                 match highlight_type {
                     HighlightType::Normal => Color::Reset,
@@ -149,7 +165,6 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
-                    /* modify */
                     if (c.is_digit(10)
                         && (previous_separator
                             || matches!(previous_highlight, HighlightType::Number)))
@@ -248,7 +263,8 @@ struct EditorRows {
 }
 
 impl EditorRows {
-    fn new(syntax_highlight: Option<&dyn SyntaxHighlight>) -> Self {
+    fn new(syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
+        // modify
         match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
@@ -258,9 +274,15 @@ impl EditorRows {
         }
     }
 
-    fn from_file(file: PathBuf, syntax_highlight: Option<&dyn SyntaxHighlight>) -> Self {
+    fn from_file(file: PathBuf, syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
+        //modify
         let file_contents = fs::read_to_string(&file).expect("Unable to read file");
         let mut row_contents = Vec::new();
+        /* add the following */
+        file.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| Output::select_syntax(ext).map(|syntax| syntax_highlight.insert(syntax)));
+        /* end */
         file_contents.lines().enumerate().for_each(|(i, line)| {
             let mut row = Row::new(line.into(), String::new());
             Self::render_row(&mut row);
@@ -532,16 +554,22 @@ struct Output {
 }
 
 impl Output {
+    fn select_syntax(extension: &str) -> Option<Box<dyn SyntaxHighlight>> {
+        let list: Vec<Box<dyn SyntaxHighlight>> = vec![Box::new(RustHighlight::new())];
+        list.into_iter()
+            .find(|it| it.extensions().contains(&extension))
+    }
+
     fn new() -> Self {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
-        let syntax_highlight: Option<Box<dyn SyntaxHighlight>> = Some(Box::new(RustHighlight));
+        let mut syntax_highlight = None; // modify
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
-            editor_rows: EditorRows::new(syntax_highlight.as_deref()),
+            editor_rows: EditorRows::new(&mut syntax_highlight), //modify
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
