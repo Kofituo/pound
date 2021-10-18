@@ -87,13 +87,14 @@ enum HighlightType {
     SearchMatch,
     String,
     CharLiteral,
-    Comment, // add line
+    Comment,
+    Other(Color), // add line
 }
 
 trait SyntaxHighlight {
     fn extensions(&self) -> &[&str];
     fn file_type(&self) -> &str;
-    fn comment_start(&self) -> &str; // add method
+    fn comment_start(&self) -> &str;
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
@@ -112,6 +113,7 @@ trait SyntaxHighlight {
         c.is_whitespace()
             || [
                 ',', '.', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"', '\'', ';',
+                '&', // modify
             ]
             .contains(&c)
     }
@@ -121,7 +123,17 @@ syntax_struct! {
     struct RustHighlight {
         extensions:["rs"],
         file_type:"rust",
-        comment_start:"//" // add line
+        comment_start:"//",
+        keywords : {
+            [Color::DarkYellow;
+                "mod","unsafe","extern","crate","use","type","struct","enum","union","const","static",
+                "mut","let","if","else","impl","trait","for","fn","self","Self", "while", "true","false",
+                "in","continue","break","loop","match"
+            ],
+            [Color::Magenta; "isize","i8","i16","i32","i64","usize","u8","u16","u32","u64","f32","f64",
+                "char","str","bool"
+            ]
+        }
     }
 }
 
@@ -131,13 +143,16 @@ macro_rules! syntax_struct {
         struct $Name:ident {
             extensions:$ext:expr,
             file_type:$type:expr,
-            comment_start:$start:expr // add line
+            comment_start:$start:expr,
+            keywords: {
+                $([$color:expr; $($words:expr),*]),*
+            }
         }
     ) => {
         struct $Name {
             extensions: &'static [&'static str],
             file_type: &'static str,
-            comment_start:&'static str // add line
+            comment_start:&'static str
         }
 
         impl $Name {
@@ -145,13 +160,12 @@ macro_rules! syntax_struct {
                 Self {
                     extensions: &$ext,
                     file_type: $type,
-                    comment_start:$start // add line
+                    comment_start:$start
                 }
             }
         }
 
         impl SyntaxHighlight for $Name {
-            /* add method */
             fn comment_start(&self) -> &str {
                 self.comment_start
             }
@@ -171,7 +185,8 @@ macro_rules! syntax_struct {
                     HighlightType::SearchMatch => Color::Blue,
                     HighlightType::String => Color::Green,
                     HighlightType::CharLiteral => Color::DarkGreen,
-                    HighlightType::Comment => Color::DarkGrey, // add line
+                    HighlightType::Comment => Color::DarkGrey,
+                    HighlightType::Other(color) => *color
                 }
             }
 
@@ -187,7 +202,7 @@ macro_rules! syntax_struct {
                 let mut i = 0;
                 let mut previous_separator = true;
                 let mut in_string: Option<char> = None;
-                let comment_start = self.comment_start().as_bytes(); // add line
+                let comment_start = self.comment_start().as_bytes();
                 while i < render.len() {
                     let c = render[i] as char;
                     let previous_highlight = if i > 0 {
@@ -195,7 +210,6 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
-                    /* add the following */
                     if in_string.is_none() && !comment_start.is_empty() {
                         let end = i + comment_start.len();
                         if render[i..cmp::min(end, render.len())] == *comment_start {
@@ -237,9 +251,27 @@ macro_rules! syntax_struct {
                         i += 1;
                         previous_separator = false;
                         continue;
-                    } else {
-                        add!(HighlightType::Normal)
                     }
+                    /* add the following */
+                    if previous_separator {
+                        $(
+                            $(
+                                let end = i + $words.len();
+                                let is_end_or_sep = render
+                                    .get(end)
+                                    .map(|c| self.is_separator(*c as char))
+                                    .unwrap_or(end == render.len());
+                                if is_end_or_sep && render[i..end] == *$words.as_bytes() {
+                                    (i..i + $words.len()).for_each(|_| add!(HighlightType::Other($color)));
+                                    i += $words.len();
+                                    previous_separator = false;
+                                    continue;
+                                }
+                            )*
+                        )*
+                    }
+                    /* end */
+                    add!(HighlightType::Normal);
                     previous_separator = self.is_separator(c);
                     i += 1;
                 }
