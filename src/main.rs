@@ -1,9 +1,16 @@
+fn u() {
+    let y = "y̆";
+
+    let mut chars = y.chars();
+}
 use crossterm::event::*;
 use crossterm::style::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
@@ -80,6 +87,24 @@ macro_rules! prompt {
     }};
 }
 
+trait StringRange {
+    fn get_string(&self, range: Range<usize>) -> &str;
+}
+
+impl StringRange for str {
+    fn get_string(&self, range: Range<usize>) -> &str {
+        let mut range = range;
+        assert!(range.start <= self.len() && range.end <= self.len());
+        while !self.is_char_boundary(range.start) {
+            range.start -= 1;
+        }
+        while !self.is_char_boundary(range.end) {
+            range.end += 1;
+        }
+        &self[range]
+    }
+}
+
 #[derive(Copy, Clone)]
 enum HighlightType {
     Normal,
@@ -88,7 +113,7 @@ enum HighlightType {
     String,
     CharLiteral,
     Comment,
-    Other(Color), // add line
+    Other(Color),
 }
 
 trait SyntaxHighlight {
@@ -359,7 +384,6 @@ struct EditorRows {
 
 impl EditorRows {
     fn new(syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
-        // modify
         match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
@@ -371,7 +395,8 @@ impl EditorRows {
 
     fn from_file(file: PathBuf, syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
         //modify
-        let file_contents = fs::read_to_string(&file).expect("Unable to read file");
+        let bytes = fs::read(&file).expect("Unable to read file");
+        let file_contents = String::from_utf8_lossy(&bytes);
         let mut row_contents = Vec::new();
         file.extension()
             .and_then(|ext| ext.to_str())
@@ -488,15 +513,25 @@ impl CursorController {
     }
 
     fn get_render_x(&self, row: &Row) -> usize {
-        row.row_content[..self.cursor_x]
-            .chars()
-            .fold(0, |render_x, c| {
-                if c == '\t' {
-                    render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
-                } else {
-                    render_x + 1
-                }
-            })
+        let new_string = row.row_content.get_string(0..self.cursor_x);
+        let mut y: usize = 0;
+        let mut o = 0;
+        new_string.char_indices().fold(0, |render_x, (i, c)| {
+            y += 1;
+            o = i;
+            OpenOptions::new()
+                .append(true)
+                .open("time.txt")
+                .unwrap()
+                .write_all(format!("c {} {} i {} y {} \n", c, &new_string[..i], i, y).as_bytes())
+                .unwrap();
+            if c == '\t' {
+                render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
+            } else {
+                assert!(row.row_content.is_char_boundary(i), "hh {}", new_string);
+                render_x + 1
+            }
+        }) - (o - (new_string.len().saturating_sub(1)))
     }
 
     fn scroll(&mut self, editor_rows: &EditorRows) {
@@ -657,12 +692,12 @@ impl Output {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
-        let mut syntax_highlight = None; // modify
+        let mut syntax_highlight = None;
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
-            editor_rows: EditorRows::new(&mut syntax_highlight), //modify
+            editor_rows: EditorRows::new(&mut syntax_highlight),
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
@@ -883,7 +918,6 @@ impl Output {
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
-        /* modify the following */
         let line_info = format!(
             "{} | {}/{}",
             self.syntax_highlight
@@ -934,6 +968,9 @@ impl Output {
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(render.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
+                let mut r = render.chars();
+                r.nth_back(render.len() - start - len);
+                r.nth(start);
                 self.syntax_highlight
                     .as_ref()
                     .map(|syntax_highlight| {
@@ -943,7 +980,7 @@ impl Output {
                             &mut self.editor_contents,
                         )
                     })
-                    .unwrap_or_else(|| self.editor_contents.push_str(&render[start..start + len]));
+                    .unwrap_or_else(|| self.editor_contents.push_str(r.as_str()));
             }
             queue!(
                 self.editor_contents,
