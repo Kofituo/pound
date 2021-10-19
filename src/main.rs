@@ -1,6 +1,6 @@
 fn u() {
     let y = "y̆";
-
+    let p = "💖";
     let mut chars = y.chars();
 }
 use crossterm::event::*;
@@ -137,8 +137,8 @@ trait SyntaxHighlight {
     fn is_separator(&self, c: char) -> bool {
         c.is_whitespace()
             || [
-                ',', '.', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"', '\'', ';',
-                '&', // modify
+                ',', '[', ']', '.', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"',
+                '\'', ';', '&', // modify
             ]
             .contains(&c)
     }
@@ -150,7 +150,7 @@ syntax_struct! {
         file_type:"rust",
         comment_start:"//",
         keywords : {
-            [Color::DarkYellow;
+            [Color::Yellow;
                 "mod","unsafe","extern","crate","use","type","struct","enum","union","const","static",
                 "mut","let","if","else","impl","trait","for","fn","self","Self", "while", "true","false",
                 "in","continue","break","loop","match"
@@ -353,13 +353,50 @@ impl Row {
     }
 
     fn insert_char(&mut self, at: usize, ch: char) {
-        self.row_content.insert(at, ch);
+        OpenOptions::new()
+            .append(true)
+            .open("time.xt")
+            .unwrap()
+            .write_all(
+                format!(
+                    "at {} len {} count {}\n",
+                    at,
+                    self.row_content.len(),
+                    self.row_content.chars().count()
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        if at < self.row_content.chars().count() {
+            let mut at = at;
+            while !self.row_content.is_char_boundary(at) {
+                at += 1;
+            }
+            self.row_content.insert(at, ch);
+        } else {
+            self.row_content.push(ch)
+        }
         EditorRows::render_row(self)
     }
 
-    fn delete_char(&mut self, at: usize) {
-        self.row_content.remove(at);
-        EditorRows::render_row(self)
+    fn delete_char(&mut self, at: usize) -> usize {
+        let mut real_at = at;
+        let mut amount_deleted = 1;
+        while !self.row_content.is_char_boundary(real_at) {
+            real_at -= 1;
+        }
+        if real_at != at {
+            let mut at = at + 1;
+            while at < self.row_content.len() && !self.row_content.is_char_boundary(at) {
+                at += 1;
+            }
+            self.row_content.replace_range(real_at..at, "");
+            amount_deleted = at - real_at
+        } else {
+            self.row_content.remove(at);
+        }
+        EditorRows::render_row(self);
+        amount_deleted
     }
 
     fn get_row_content_x(&self, render_x: usize) -> usize {
@@ -513,31 +550,34 @@ impl CursorController {
     }
 
     fn get_render_x(&self, row: &Row) -> usize {
-        let new_string = row.row_content.get_string(0..self.cursor_x);
-        let mut y: usize = 0;
-        let mut o = 0;
-        new_string.char_indices().fold(0, |render_x, (i, c)| {
-            y += 1;
-            o = i;
-            OpenOptions::new()
-                .append(true)
-                .open("time.txt")
-                .unwrap()
-                .write_all(format!("c {} {} i {} y {} \n", c, &new_string[..i], i, y).as_bytes())
-                .unwrap();
-            if c == '\t' {
-                render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
-            } else {
-                assert!(row.row_content.is_char_boundary(i), "hh {}", new_string);
-                render_x + 1
-            }
-        }) - (o - (new_string.len().saturating_sub(1)))
+        row.row_content
+            .char_indices()
+            .take(self.cursor_x)
+            .fold(0, |render_x, (i, c)| {
+                OpenOptions::new()
+                    .append(true)
+                    .open("time.xt")
+                    .unwrap()
+                    .write_all(format!("{} c {}\n", i, c).as_bytes())
+                    .unwrap();
+                if c == '\t' {
+                    render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
+                } else {
+                    render_x + 1
+                }
+            })
     }
 
     fn scroll(&mut self, editor_rows: &EditorRows) {
         self.render_x = 0;
         if self.cursor_y < editor_rows.number_of_rows() {
             self.render_x = self.get_render_x(editor_rows.get_editor_row(self.cursor_y));
+            OpenOptions::new()
+                .append(true)
+                .open("time.xt")
+                .unwrap()
+                .write_all(format!("{} cx {}\n", self.render_x, self.cursor_x).as_bytes())
+                .unwrap();
         }
         self.row_offset = cmp::min(self.row_offset, self.cursor_y);
         if self.cursor_y >= self.row_offset + self.screen_rows {
@@ -558,10 +598,31 @@ impl CursorController {
             }
             KeyCode::Left => {
                 if self.cursor_x != 0 {
-                    self.cursor_x -= 1;
+                    let mut new_x = self.cursor_x - 1;
+                    let row = editor_rows.get_row(self.cursor_y);
+                    while !row.is_char_boundary(new_x) {
+                        new_x -= 1;
+                    }
+                    self.cursor_x = new_x;
                 } else if self.cursor_y > 0 {
                     self.cursor_y -= 1;
-                    self.cursor_x = editor_rows.get_row(self.cursor_y).len();
+                    self.cursor_x = editor_rows.get_row(self.cursor_y).chars().count();
+                    /*OpenOptions::new()
+                    .append(true)
+                    .open("time.xt")
+                    .unwrap()
+                    .write_all(
+                        format!(
+                            "{:?} cx {}",
+                            editor_rows
+                                .get_row(self.cursor_y)
+                                .chars()
+                                .collect::<Vec<_>>(),
+                            self.cursor_x
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();*/
                 }
             }
             KeyCode::Down => {
@@ -571,8 +632,18 @@ impl CursorController {
             }
             KeyCode::Right => {
                 if self.cursor_y < number_of_rows {
-                    match self.cursor_x.cmp(&editor_rows.get_row(self.cursor_y).len()) {
-                        Ordering::Less => self.cursor_x += 1,
+                    match self
+                        .cursor_x
+                        .cmp(&editor_rows.get_row(self.cursor_y).chars().count())
+                    {
+                        Ordering::Less => {
+                            let mut add = 1;
+                            let row = editor_rows.get_row(self.cursor_y);
+                            while !row.is_char_boundary(add) {
+                                add += 1;
+                            }
+                            self.cursor_x += add;
+                        }
                         Ordering::Equal => {
                             self.cursor_y += 1;
                             self.cursor_x = 0
@@ -583,14 +654,14 @@ impl CursorController {
             }
             KeyCode::End => {
                 if self.cursor_y < number_of_rows {
-                    self.cursor_x = editor_rows.get_row(self.cursor_y).len();
+                    self.cursor_x = editor_rows.get_row(self.cursor_y).chars().count();
                 }
             }
             KeyCode::Home => self.cursor_x = 0,
             _ => unimplemented!(),
         }
         let row_len = if self.cursor_y < number_of_rows {
-            editor_rows.get_row(self.cursor_y).len()
+            editor_rows.get_row(self.cursor_y).chars().count()
         } else {
             0
         };
@@ -761,6 +832,7 @@ impl Output {
                     if row_index > output.editor_rows.number_of_rows() - 1 {
                         break;
                     }
+
                     let row = output.editor_rows.get_editor_row_mut(row_index);
                     let index = match output.search_index.x_direction.as_ref() {
                         None => row.render.find(&keyword),
@@ -831,10 +903,16 @@ impl Output {
             return;
         }
         if self.cursor_controller.cursor_x > 0 {
-            self.editor_rows
+            self.cursor_controller.cursor_x -= self
+                .editor_rows
                 .get_editor_row_mut(self.cursor_controller.cursor_y)
                 .delete_char(self.cursor_controller.cursor_x - 1);
-            self.cursor_controller.cursor_x -= 1;
+            OpenOptions::new()
+                .append(true)
+                .open("time.xt")
+                .unwrap()
+                .write_all(format!("{}\n", self.cursor_controller.cursor_x).as_bytes())
+                .unwrap();
         } else {
             let previous_row_content = self
                 .editor_rows
