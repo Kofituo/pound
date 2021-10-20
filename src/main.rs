@@ -1,16 +1,9 @@
-fn u() {
-    let y = "y̆";
-    let p = "💖";
-    let mut chars = y.chars();
-}
 use crossterm::event::*;
 use crossterm::style::*;
 use crossterm::terminal::ClearType;
 use crossterm::{cursor, event, execute, queue, style, terminal};
 use std::cmp::Ordering;
-use std::fs::OpenOptions;
 use std::io::{stdout, ErrorKind, Write};
-use std::ops::Range;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{cmp, env, fs, io};
@@ -87,24 +80,6 @@ macro_rules! prompt {
     }};
 }
 
-trait StringRange {
-    fn get_string(&self, range: Range<usize>) -> &str;
-}
-
-impl StringRange for str {
-    fn get_string(&self, range: Range<usize>) -> &str {
-        let mut range = range;
-        assert!(range.start <= self.len() && range.end <= self.len());
-        while !self.is_char_boundary(range.start) {
-            range.start -= 1;
-        }
-        while !self.is_char_boundary(range.end) {
-            range.end += 1;
-        }
-        &self[range]
-    }
-}
-
 #[derive(Copy, Clone)]
 enum HighlightType {
     Normal,
@@ -113,7 +88,7 @@ enum HighlightType {
     String,
     CharLiteral,
     Comment,
-    Other(Color),
+    Other(Color), // add line
 }
 
 trait SyntaxHighlight {
@@ -137,7 +112,7 @@ trait SyntaxHighlight {
     fn is_separator(&self, c: char) -> bool {
         c.is_whitespace()
             || [
-                ',', '[', ']', '.', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"',
+                ',', '.', '[', ']', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"',
                 '\'', ';', '&', // modify
             ]
             .contains(&c)
@@ -150,7 +125,7 @@ syntax_struct! {
         file_type:"rust",
         comment_start:"//",
         keywords : {
-            [Color::Yellow;
+            [Color::DarkYellow;
                 "mod","unsafe","extern","crate","use","type","struct","enum","union","const","static",
                 "mut","let","if","else","impl","trait","for","fn","self","Self", "while", "true","false",
                 "in","continue","break","loop","match"
@@ -353,50 +328,13 @@ impl Row {
     }
 
     fn insert_char(&mut self, at: usize, ch: char) {
-        OpenOptions::new()
-            .append(true)
-            .open("time.xt")
-            .unwrap()
-            .write_all(
-                format!(
-                    "at {} len {} count {}\n",
-                    at,
-                    self.row_content.len(),
-                    self.row_content.chars().count()
-                )
-                .as_bytes(),
-            )
-            .unwrap();
-        if at < self.row_content.chars().count() {
-            let mut at = at;
-            while !self.row_content.is_char_boundary(at) {
-                at += 1;
-            }
-            self.row_content.insert(at, ch);
-        } else {
-            self.row_content.push(ch)
-        }
+        self.row_content.insert(at, ch);
         EditorRows::render_row(self)
     }
 
-    fn delete_char(&mut self, at: usize) -> usize {
-        let mut real_at = at;
-        let mut amount_deleted = 1;
-        while !self.row_content.is_char_boundary(real_at) {
-            real_at -= 1;
-        }
-        if real_at != at {
-            let mut at = at + 1;
-            while at < self.row_content.len() && !self.row_content.is_char_boundary(at) {
-                at += 1;
-            }
-            self.row_content.replace_range(real_at..at, "");
-            amount_deleted = at - real_at
-        } else {
-            self.row_content.remove(at);
-        }
-        EditorRows::render_row(self);
-        amount_deleted
+    fn delete_char(&mut self, at: usize) {
+        self.row_content.remove(at);
+        EditorRows::render_row(self)
     }
 
     fn get_row_content_x(&self, render_x: usize) -> usize {
@@ -421,6 +359,7 @@ struct EditorRows {
 
 impl EditorRows {
     fn new(syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
+        // modify
         match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
@@ -432,8 +371,7 @@ impl EditorRows {
 
     fn from_file(file: PathBuf, syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
         //modify
-        let bytes = fs::read(&file).expect("Unable to read file");
-        let file_contents = String::from_utf8_lossy(&bytes);
+        let file_contents = fs::read_to_string(&file).expect("Unable to read file");
         let mut row_contents = Vec::new();
         file.extension()
             .and_then(|ext| ext.to_str())
@@ -550,16 +488,9 @@ impl CursorController {
     }
 
     fn get_render_x(&self, row: &Row) -> usize {
-        row.row_content
-            .char_indices()
-            .take(self.cursor_x)
-            .fold(0, |render_x, (i, c)| {
-                OpenOptions::new()
-                    .append(true)
-                    .open("time.xt")
-                    .unwrap()
-                    .write_all(format!("{} c {}\n", i, c).as_bytes())
-                    .unwrap();
+        row.row_content[..self.cursor_x]
+            .chars()
+            .fold(0, |render_x, c| {
                 if c == '\t' {
                     render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
                 } else {
@@ -572,12 +503,6 @@ impl CursorController {
         self.render_x = 0;
         if self.cursor_y < editor_rows.number_of_rows() {
             self.render_x = self.get_render_x(editor_rows.get_editor_row(self.cursor_y));
-            OpenOptions::new()
-                .append(true)
-                .open("time.xt")
-                .unwrap()
-                .write_all(format!("{} cx {}\n", self.render_x, self.cursor_x).as_bytes())
-                .unwrap();
         }
         self.row_offset = cmp::min(self.row_offset, self.cursor_y);
         if self.cursor_y >= self.row_offset + self.screen_rows {
@@ -598,31 +523,10 @@ impl CursorController {
             }
             KeyCode::Left => {
                 if self.cursor_x != 0 {
-                    let mut new_x = self.cursor_x - 1;
-                    let row = editor_rows.get_row(self.cursor_y);
-                    while !row.is_char_boundary(new_x) {
-                        new_x -= 1;
-                    }
-                    self.cursor_x = new_x;
+                    self.cursor_x -= 1;
                 } else if self.cursor_y > 0 {
                     self.cursor_y -= 1;
-                    self.cursor_x = editor_rows.get_row(self.cursor_y).chars().count();
-                    /*OpenOptions::new()
-                    .append(true)
-                    .open("time.xt")
-                    .unwrap()
-                    .write_all(
-                        format!(
-                            "{:?} cx {}",
-                            editor_rows
-                                .get_row(self.cursor_y)
-                                .chars()
-                                .collect::<Vec<_>>(),
-                            self.cursor_x
-                        )
-                        .as_bytes(),
-                    )
-                    .unwrap();*/
+                    self.cursor_x = editor_rows.get_row(self.cursor_y).len();
                 }
             }
             KeyCode::Down => {
@@ -632,18 +536,8 @@ impl CursorController {
             }
             KeyCode::Right => {
                 if self.cursor_y < number_of_rows {
-                    match self
-                        .cursor_x
-                        .cmp(&editor_rows.get_row(self.cursor_y).chars().count())
-                    {
-                        Ordering::Less => {
-                            let mut add = 1;
-                            let row = editor_rows.get_row(self.cursor_y);
-                            while !row.is_char_boundary(add) {
-                                add += 1;
-                            }
-                            self.cursor_x += add;
-                        }
+                    match self.cursor_x.cmp(&editor_rows.get_row(self.cursor_y).len()) {
+                        Ordering::Less => self.cursor_x += 1,
                         Ordering::Equal => {
                             self.cursor_y += 1;
                             self.cursor_x = 0
@@ -654,14 +548,14 @@ impl CursorController {
             }
             KeyCode::End => {
                 if self.cursor_y < number_of_rows {
-                    self.cursor_x = editor_rows.get_row(self.cursor_y).chars().count();
+                    self.cursor_x = editor_rows.get_row(self.cursor_y).len();
                 }
             }
             KeyCode::Home => self.cursor_x = 0,
             _ => unimplemented!(),
         }
         let row_len = if self.cursor_y < number_of_rows {
-            editor_rows.get_row(self.cursor_y).chars().count()
+            editor_rows.get_row(self.cursor_y).len()
         } else {
             0
         };
@@ -763,12 +657,12 @@ impl Output {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize - 2))
             .unwrap();
-        let mut syntax_highlight = None;
+        let mut syntax_highlight = None; // modify
         Self {
             win_size,
             editor_contents: EditorContents::new(),
             cursor_controller: CursorController::new(win_size),
-            editor_rows: EditorRows::new(&mut syntax_highlight),
+            editor_rows: EditorRows::new(&mut syntax_highlight), //modify
             status_message: StatusMessage::new(
                 "HELP: Ctrl-S = Save | Ctrl-Q = Quit | Ctrl-F = Find".into(),
             ),
@@ -832,7 +726,6 @@ impl Output {
                     if row_index > output.editor_rows.number_of_rows() - 1 {
                         break;
                     }
-
                     let row = output.editor_rows.get_editor_row_mut(row_index);
                     let index = match output.search_index.x_direction.as_ref() {
                         None => row.render.find(&keyword),
@@ -903,16 +796,10 @@ impl Output {
             return;
         }
         if self.cursor_controller.cursor_x > 0 {
-            self.cursor_controller.cursor_x -= self
-                .editor_rows
+            self.editor_rows
                 .get_editor_row_mut(self.cursor_controller.cursor_y)
                 .delete_char(self.cursor_controller.cursor_x - 1);
-            OpenOptions::new()
-                .append(true)
-                .open("time.xt")
-                .unwrap()
-                .write_all(format!("{}\n", self.cursor_controller.cursor_x).as_bytes())
-                .unwrap();
+            self.cursor_controller.cursor_x -= 1;
         } else {
             let previous_row_content = self
                 .editor_rows
@@ -996,6 +883,7 @@ impl Output {
             self.editor_rows.number_of_rows()
         );
         let info_len = cmp::min(info.len(), self.win_size.0);
+        /* modify the following */
         let line_info = format!(
             "{} | {}/{}",
             self.syntax_highlight
@@ -1046,9 +934,6 @@ impl Output {
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(render.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
-                let mut r = render.chars();
-                r.nth_back(render.len() - start - len);
-                r.nth(start);
                 self.syntax_highlight
                     .as_ref()
                     .map(|syntax_highlight| {
@@ -1058,7 +943,7 @@ impl Output {
                             &mut self.editor_contents,
                         )
                     })
-                    .unwrap_or_else(|| self.editor_contents.push_str(r.as_str()));
+                    .unwrap_or_else(|| self.editor_contents.push_str(&render[start..start + len]));
             }
             queue!(
                 self.editor_contents,
