@@ -88,13 +88,15 @@ enum HighlightType {
     String,
     CharLiteral,
     Comment,
-    Other(Color), // add line
+    MultilineComment, // add line
+    Other(Color),
 }
 
 trait SyntaxHighlight {
     fn extensions(&self) -> &[&str];
     fn file_type(&self) -> &str;
     fn comment_start(&self) -> &str;
+    fn multiline_comment(&self) -> Option<(&str, &str)>; // add line
     fn syntax_color(&self, highlight_type: &HighlightType) -> Color;
     fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>);
     fn color_row(&self, render: &str, highlight: &[HighlightType], out: &mut EditorContents) {
@@ -113,7 +115,7 @@ trait SyntaxHighlight {
         c.is_whitespace()
             || [
                 ',', '.', '[', ']', '(', ')', '+', '-', '/', '*', '=', '~', '%', '<', '>', '"',
-                '\'', ';', '&', // modify
+                '\'', ';', '&',
             ]
             .contains(&c)
     }
@@ -125,7 +127,7 @@ syntax_struct! {
         file_type:"rust",
         comment_start:"//",
         keywords : {
-            [Color::DarkYellow;
+            [Color::Yellow;
                 "mod","unsafe","extern","crate","use","type","struct","enum","union","const","static",
                 "mut","let","if","else","impl","trait","for","fn","self","Self", "while", "true","false",
                 "in","continue","break","loop","match"
@@ -133,7 +135,8 @@ syntax_struct! {
             [Color::Magenta; "isize","i8","i16","i32","i64","usize","u8","u16","u32","u64","f32","f64",
                 "char","str","bool"
             ]
-        }
+        },
+        multiline_comment: Some(("/*", "*/"))
     }
 }
 
@@ -146,13 +149,15 @@ macro_rules! syntax_struct {
             comment_start:$start:expr,
             keywords: {
                 $([$color:expr; $($words:expr),*]),*
-            }
+            },
+            multiline_comment:$ml_comment:expr
         }
     ) => {
         struct $Name {
             extensions: &'static [&'static str],
             file_type: &'static str,
-            comment_start:&'static str
+            comment_start:&'static str,
+            multiline_comment:Option<(&'static str,&'static str)>
         }
 
         impl $Name {
@@ -160,14 +165,20 @@ macro_rules! syntax_struct {
                 Self {
                     extensions: &$ext,
                     file_type: $type,
-                    comment_start:$start
+                    comment_start:$start,
+                    multiline_comment: $ml_comment
                 }
             }
         }
 
         impl SyntaxHighlight for $Name {
+
             fn comment_start(&self) -> &str {
                 self.comment_start
+            }
+
+            fn multiline_comment(&self) -> Option<(&str, &str)> {
+                self.multiline_comment
             }
 
             fn extensions(&self) -> &[&str] {
@@ -185,7 +196,7 @@ macro_rules! syntax_struct {
                     HighlightType::SearchMatch => Color::Blue,
                     HighlightType::String => Color::Green,
                     HighlightType::CharLiteral => Color::DarkGreen,
-                    HighlightType::Comment => Color::DarkGrey,
+                    HighlightType::Comment | HighlightType::MultilineComment => Color::DarkGrey,
                     HighlightType::Other(color) => *color
                 }
             }
@@ -203,6 +214,7 @@ macro_rules! syntax_struct {
                 let mut previous_separator = true;
                 let mut in_string: Option<char> = None;
                 let comment_start = self.comment_start().as_bytes();
+                let mut in_comment = false;
                 while i < render.len() {
                     let c = render[i] as char;
                     let previous_highlight = if i > 0 {
@@ -210,11 +222,37 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
-                    if in_string.is_none() && !comment_start.is_empty() {
+                    if in_string.is_none() && !comment_start.is_empty() && !in_comment{ // modify
                         let end = i + comment_start.len();
                         if render[i..cmp::min(end, render.len())] == *comment_start {
                             (i..render.len()).for_each(|_| add!(HighlightType::Comment));
                             break;
+                        }
+                    }
+                    if let Some(val) = $ml_comment {
+                        if in_string.is_none() {
+                            if in_comment {
+                                add!(HighlightType::MultilineComment);
+                                let end = i + val.1.len();
+                                if render[i..cmp::min(render.len(),end)] == *val.1.as_bytes() {
+                                    (0..val.1.len().saturating_sub(1)).for_each(|_| add!(HighlightType::MultilineComment));
+                                    i = end;
+                                    previous_separator = true;
+                                    in_comment = false;
+                                    continue
+                                } else {
+                                    i+=1;
+                                    continue
+                                }
+                            } else {
+                                let end = i + val.0.len();
+                                if render[i..cmp::min(render.len(),end)] == *val.0.as_bytes() {
+                                    (i..end).for_each(|_| add!(HighlightType::MultilineComment));
+                                    i+= val.0.len();
+                                    in_comment = true;
+                                    continue
+                                }
+                            }
                         }
                     }
                     if let Some(val) = in_string {
@@ -252,7 +290,6 @@ macro_rules! syntax_struct {
                         previous_separator = false;
                         continue;
                     }
-                    /* add the following */
                     if previous_separator {
                         $(
                             $(
@@ -262,7 +299,7 @@ macro_rules! syntax_struct {
                                     .map(|c| self.is_separator(*c as char))
                                     .unwrap_or(end == render.len());
                                 if is_end_or_sep && render[i..end] == *$words.as_bytes() {
-                                    (i..i + $words.len()).for_each(|_| add!(HighlightType::Other($color)));
+                                    (i..end).for_each(|_| add!(HighlightType::Other($color)));
                                     i += $words.len();
                                     previous_separator = false;
                                     continue;
@@ -270,7 +307,6 @@ macro_rules! syntax_struct {
                             )*
                         )*
                     }
-                    /* end */
                     add!(HighlightType::Normal);
                     previous_separator = self.is_separator(c);
                     i += 1;
@@ -359,7 +395,6 @@ struct EditorRows {
 
 impl EditorRows {
     fn new(syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
-        // modify
         match env::args().nth(1) {
             None => Self {
                 row_contents: Vec::new(),
@@ -370,7 +405,6 @@ impl EditorRows {
     }
 
     fn from_file(file: PathBuf, syntax_highlight: &mut Option<Box<dyn SyntaxHighlight>>) -> Self {
-        //modify
         let file_contents = fs::read_to_string(&file).expect("Unable to read file");
         let mut row_contents = Vec::new();
         file.extension()
@@ -488,8 +522,9 @@ impl CursorController {
     }
 
     fn get_render_x(&self, row: &Row) -> usize {
-        row.row_content[..self.cursor_x]
+        row.row_content
             .chars()
+            .take(self.cursor_x)
             .fold(0, |render_x, c| {
                 if c == '\t' {
                     render_x + (TAB_STOP - 1) - (render_x % TAB_STOP) + 1
@@ -934,16 +969,17 @@ impl Output {
                 let column_offset = self.cursor_controller.column_offset;
                 let len = cmp::min(render.len().saturating_sub(column_offset), screen_columns);
                 let start = if len == 0 { 0 } else { column_offset };
+                let render = render.chars().skip(start).take(len).collect::<String>();
                 self.syntax_highlight
                     .as_ref()
                     .map(|syntax_highlight| {
                         syntax_highlight.color_row(
-                            &render[start..start + len],
+                            &render,
                             &row.highlight[start..start + len],
                             &mut self.editor_contents,
                         )
                     })
-                    .unwrap_or_else(|| self.editor_contents.push_str(&render[start..start + len]));
+                    .unwrap_or_else(|| self.editor_contents.push_str(&render));
             }
             queue!(
                 self.editor_contents,
