@@ -1,3 +1,5 @@
+/// Authored by Kofi Otuo <otuokofi@outlook.com>
+///
 use crossterm::event::*;
 use crossterm::style::*;
 use crossterm::terminal::ClearType;
@@ -312,13 +314,11 @@ macro_rules! syntax_struct {
                     i += 1;
                 }
                 assert_eq!(current_row.render.len(), current_row.highlight.len());
-                /* add the following */
                 let changed = current_row.is_comment != in_comment;
                 current_row.is_comment = in_comment;
                 if (changed && at + 1 < editor_rows.len()) {
                     self.update_syntax(at+1,editor_rows)
                 }
-                /* end */
             }
         }
     };
