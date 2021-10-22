@@ -202,6 +202,7 @@ macro_rules! syntax_struct {
             }
 
             fn update_syntax(&self, at: usize, editor_rows: &mut Vec<Row>) {
+                let mut in_comment = at > 0 && editor_rows[at - 1].is_comment; // add line
                 let current_row = &mut editor_rows[at];
                 macro_rules! add {
                     ($h:expr) => {
@@ -214,7 +215,6 @@ macro_rules! syntax_struct {
                 let mut previous_separator = true;
                 let mut in_string: Option<char> = None;
                 let comment_start = self.comment_start().as_bytes();
-                let mut in_comment = false;
                 while i < render.len() {
                     let c = render[i] as char;
                     let previous_highlight = if i > 0 {
@@ -222,7 +222,7 @@ macro_rules! syntax_struct {
                     } else {
                         HighlightType::Normal
                     };
-                    if in_string.is_none() && !comment_start.is_empty() && !in_comment{ // modify
+                    if in_string.is_none() && !comment_start.is_empty() && !in_comment { // modify
                         let end = i + comment_start.len();
                         if render[i..cmp::min(end, render.len())] == *comment_start {
                             (i..render.len()).for_each(|_| add!(HighlightType::Comment));
@@ -311,7 +311,14 @@ macro_rules! syntax_struct {
                     previous_separator = self.is_separator(c);
                     i += 1;
                 }
-                assert_eq!(current_row.render.len(), current_row.highlight.len())
+                assert_eq!(current_row.render.len(), current_row.highlight.len());
+                /* add the following */
+                let changed = current_row.is_comment != in_comment;
+                current_row.is_comment = in_comment;
+                if (changed && at + 1 < editor_rows.len()) {
+                    self.update_syntax(at+1,editor_rows)
+                }
+                /* end */
             }
         }
     };
@@ -352,6 +359,7 @@ struct Row {
     row_content: String,
     render: String,
     highlight: Vec<HighlightType>,
+    is_comment: bool, // add line
 }
 
 impl Row {
@@ -360,6 +368,7 @@ impl Row {
             row_content,
             render,
             highlight: Vec::new(),
+            is_comment: false, // add line
         }
     }
 
