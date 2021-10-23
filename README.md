@@ -18,5 +18,9 @@ cargo run --release /src/main.rs
 
 View the full tutorial on how to write a text editor with Rust [here](https://medium.com/@otukof/build-your-text-editor-with-rust-678a463f968b).
 
-##License
+
+
+<h2>License</h2>
+
+
 [BSD 2 license](https://github.com/Kofituo/pound/blob/master/LICENSE)
